@@ -5,9 +5,23 @@ namespace TxOrganizer.ConsoleRender;
 
 public class TaxLotsRenderer: TransactionRenderer
 {
+    private readonly bool _trace;
+
+    public TaxLotsRenderer()
+    {
+        var response1 = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("Do you want to trace balances or see the final snapshot?")
+                .AddChoices("Trace", "Snapshot"));
+        _trace = string.Equals(response1, "Trace");
+    }
+
+    public bool Trace => _trace;
+
     public void TraceTaxLotsAction(Transaction tx, double remaining, double sold, TaxLot currentLot,
         IEnumerable<TaxLot> taxLots)
     {
+        if(!Trace) return;
         if (tx.BuyCurrency != TargetCurrency && tx.SellCurrency != TargetCurrency) return;
         if (currentLot.Currency != TargetCurrency) return;
         
@@ -29,7 +43,7 @@ public class TaxLotsRenderer: TransactionRenderer
         }
     }
     
-    private void RenderTaxLots(TaxLot currentLot, IEnumerable<TaxLot> allLots)
+    public void RenderTaxLots(TaxLot? currentLot, IEnumerable<TaxLot> allLots)
     {
         var outstanding = CalculateOutstandingAmount(allLots);
 

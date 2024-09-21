@@ -2,7 +2,18 @@ namespace TxOrganizer.DTO;
 
 public enum TxType
 {
-    Trade, Deposit, Withdrawal, Spend, Migration, Gift, Income, Lost, Airdrop, Borrow, Repay, Stolen
+    Trade = 0,
+    Deposit = 1,
+    Withdrawal = 2,
+    Spend = 3,
+    Migration = 4,
+    Gift = 5,
+    Income = 6,
+    Lost = 7,
+    Airdrop = 8,
+    Borrow = 9,
+    Repay = 10,
+    Stolen = 11
 }
 
 public class Transaction

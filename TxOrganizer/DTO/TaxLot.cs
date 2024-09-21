@@ -6,7 +6,7 @@ public class TaxLot
 
     private readonly List<TxSpend> _feeSpendTransactions;
 
-    public static readonly TxType[] SupportedBuyTxTypes = { TxType.Trade, TxType.Migration, TxType.Airdrop, TxType.Income };
+    protected readonly TxType[] SupportedBuyTxTypes = { TxType.Trade, TxType.Migration, TxType.Airdrop, TxType.Income };
 
     public TaxLot(Transaction tx)
     {

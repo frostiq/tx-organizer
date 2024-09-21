@@ -7,10 +7,9 @@ public class PositionProcessor
 {
     private readonly CoinGeckoPriceFetcher _coinGeckoPriceFetcher;
     private static readonly Regex CurrencyRegex = new Regex(@"^(.+)-\d", RegexOptions.Compiled);
-
-    private readonly IList<TxType> _sellTxTypes = TaxLot.SupportedBuyTxTypes
-        .Concat(new[] { TxType.Spend, TxType.Lost, TxType.Gift, TxType.Stolen })
-        .ToList();
+    
+    private readonly TxType[] _buyTxTypes = { TxType.Trade, TxType.Migration, TxType.Airdrop, TxType.Income };
+    private readonly TxType[] _sellTxTypes = { TxType.Trade, TxType.Migration, TxType.Spend, TxType.Lost, TxType.Gift, TxType.Stolen };
 
     public PositionProcessor(CoinGeckoPriceFetcher coinGeckoPriceFetcher)
     {
@@ -23,6 +22,7 @@ public class PositionProcessor
         var positions = new List<Position>();
         var unmatchedSpends = new List<TxSpend>();
         var selectedTransactions = transactions
+            .Where(x => _buyTxTypes.Contains(x.Type) || _sellTxTypes.Contains(x.Type))
             .Where(x => x.BuyCurrency != "USDTPROFIT" && x.SellCurrency != "USDTPROFIT")
             .OrderBy(x => x.Date);
 
@@ -31,7 +31,7 @@ public class PositionProcessor
             tx.BuyCurrency = MapCurrency(tx.BuyCurrency);
             tx.SellCurrency = MapCurrency(tx.SellCurrency);
 
-            if (Position.SupportedBuyTxTypes.Contains(tx.Type) && tx.BuyCurrency != "USD")
+            if (_buyTxTypes.Contains(tx.Type) && tx.BuyCurrency != "USD")
             {
                 var currentPosition = positions.SingleOrDefault(x => x.Currency == tx.BuyCurrency && !x.Sold);
 

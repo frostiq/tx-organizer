@@ -1,3 +1,4 @@
+using Spectre.Console;
 using TxOrganizer.ConsoleRender;
 using TxOrganizer.DTO;
 
@@ -5,42 +6,52 @@ namespace TxOrganizer.Processors;
 
 public class TaxLotProcessor
 {
+    private readonly TxType[] _buyTxTypes = { TxType.Trade, TxType.Migration, TxType.Airdrop, TxType.Income };
+    private readonly TxType[] _sellTxTypes = { TxType.Trade, TxType.Migration, TxType.Spend, TxType.Lost, TxType.Gift, TxType.Stolen };
+    
     public (List<TaxLot> taxLots, List<TxSpend> unmatchedSpends) BuildTaxLots(
-        IEnumerable<Transaction> transactions, 
-        TaxLotsRenderer taxLotsRenderer)
+        IEnumerable<Transaction> transactions,
+        TaxLotsRenderer taxLotsRenderer, ProgressTask task)
     {
         var taxLots = new List<TaxLot>();
         var unmatchedSpends = new List<TxSpend>();
-        var txTypes = TaxLot.SupportedBuyTxTypes.Concat(new[] { TxType.Spend, TxType.Lost, TxType.Gift, TxType.Stolen });
+
         var selectedTransactions = transactions
-            .Where(x => txTypes.Contains(x.Type))
-            .OrderBy(x => x.Date);
+            .Where(x => _buyTxTypes.Contains(x.Type) || _sellTxTypes.Contains(x.Type))
+            .OrderBy(x => x.Date).ToList();
+        
         foreach (var tx in selectedTransactions)
         {
             var remaining = tx.SellAmount;
             var currency = tx.SellCurrency;
-            if (new[] { TxType.Trade, TxType.Airdrop, TxType.Income}.Contains(tx.Type))
+            if (_buyTxTypes.Contains(tx.Type))
             {
                 var newLot = new TaxLot(tx);
                 taxLots.Add(newLot);
                 taxLotsRenderer.TraceTaxLotsAction(tx, 0, 0, newLot, taxLots);
             }
 
-            if (tx.SellCurrency == "USD") continue;
-            while (remaining > 0)
+            if (tx.SellCurrency != "USD" && _sellTxTypes.Contains(tx.Type))
             {
-                var taxLot = FindHiFoTaxLot(currency, taxLots);
-                if (taxLot is null)
+                while (remaining > 0)
                 {
-                    unmatchedSpends.Add(new TxSpend(tx, remaining));
-                    break;
-                }
+                    var taxLot = FindHiFoTaxLot(currency, taxLots);
+                    if (taxLot is null)
+                    {
+                        unmatchedSpends.Add(new TxSpend(tx, remaining));
+                        break;
+                    }
 
-                (remaining, var sold) = taxLot.Sell(tx, remaining);
-                
-                taxLotsRenderer.TraceTaxLotsAction(tx, remaining, sold, taxLot, taxLots);
+                    (remaining, var sold) = taxLot.Sell(tx, remaining);
+
+                    taxLotsRenderer.TraceTaxLotsAction(tx, remaining, sold, taxLot, taxLots);
+                }
             }
+
+            task?.Increment(1.0 / selectedTransactions.Count);
         }
+        
+        taxLotsRenderer.RenderTaxLots(null, taxLots);
 
         return (taxLots, unmatchedSpends);
     }

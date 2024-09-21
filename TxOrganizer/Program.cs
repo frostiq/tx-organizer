@@ -36,8 +36,24 @@ try
         case traceTaxLots:
         {
             var transactions = await ReadAllTransactions();
-            var consoleRenderer = new TaxLotsRenderer();
-            var (taxLots, unmatchedSpends) = new TaxLotProcessor().BuildTaxLots(transactions, consoleRenderer);
+            var taxLotsRenderer = new TaxLotsRenderer();
+            var taxLotsProcessor = new TaxLotProcessor();
+
+            if (taxLotsRenderer.Trace)
+            {
+                taxLotsProcessor.BuildTaxLots(transactions, taxLotsRenderer, null);
+            }
+            else
+            {
+                AnsiConsole.Progress()
+                    .Start(ctx =>
+                    {
+                        var task = ctx.AddTask("Building tax lots...", maxValue: 1.0);
+                        taxLotsProcessor.BuildTaxLots(transactions, taxLotsRenderer, task);
+                        task.Value = task.MaxValue;
+                    });
+            }
+
             break;
         }
         case positionHistory:
@@ -63,8 +79,8 @@ catch (ApplicationException e)
 }
 
 // Read transactions function
-async Task<IEnumerable<Transaction>> ReadAllTransactions(){
+async Task<IEnumerable<Transaction>> ReadAllTransactions()
+{
     return await AnsiConsole.Status()
         .StartAsync("Loading transactions from database...", _ => repository.ReadAllTransactions());
 }
-
