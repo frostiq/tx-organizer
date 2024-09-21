@@ -21,7 +21,7 @@ public class TaxLotsRenderer: TransactionRenderer
     public void TraceTaxLotsAction(Transaction tx, double remaining, double sold, TaxLot currentLot,
         IEnumerable<TaxLot> taxLots)
     {
-        if(!Trace) return;
+        if (!Trace) return;
         if (tx.BuyCurrency != TargetCurrency && tx.SellCurrency != TargetCurrency) return;
         if (currentLot.Currency != TargetCurrency) return;
         

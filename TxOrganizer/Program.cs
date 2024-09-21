@@ -41,7 +41,7 @@ try
 
             if (taxLotsRenderer.Trace)
             {
-                taxLotsProcessor.BuildTaxLots(transactions, taxLotsRenderer, null);
+                taxLotsProcessor.BuildTaxLots(transactions, taxLotsRenderer, null, taxLotsRenderer.TargetCurrency);
             }
             else
             {
@@ -49,10 +49,12 @@ try
                     .Start(ctx =>
                     {
                         var task = ctx.AddTask("Building tax lots...", maxValue: 1.0);
-                        taxLotsProcessor.BuildTaxLots(transactions, taxLotsRenderer, task);
+                        taxLotsProcessor.BuildTaxLots(transactions, taxLotsRenderer, task, taxLotsRenderer.TargetCurrency);
                         task.Value = task.MaxValue;
                     });
             }
+            
+            taxLotsProcessor.WriteTotalQuantityHistoryToCsv("total_quantity_history_taxlots.csv");
 
             break;
         }
