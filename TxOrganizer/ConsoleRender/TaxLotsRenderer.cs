@@ -7,8 +7,11 @@ public class TaxLotsRenderer: TransactionRenderer
 {
     private readonly bool _trace;
 
-    public TaxLotsRenderer()
+    private readonly DateTime? _startDate;
+
+    public TaxLotsRenderer(DateTime? startDate)
     {
+        _startDate = startDate;
         var response1 = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("Do you want to trace balances or see the final snapshot?")
@@ -24,6 +27,7 @@ public class TaxLotsRenderer: TransactionRenderer
         if (!Trace) return;
         if (tx.BuyCurrency != TargetCurrency && tx.SellCurrency != TargetCurrency) return;
         if (currentLot.Currency != TargetCurrency) return;
+        if (_startDate.HasValue && tx.Date < _startDate) return;
         
         AnsiConsole.Clear();
         RenderTaxLots(currentLot, taxLots);

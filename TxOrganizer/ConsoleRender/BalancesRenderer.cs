@@ -9,8 +9,11 @@ public class BalancesRenderer : TransactionRenderer
 
     private readonly bool _trace;
 
-    public BalancesRenderer()
+    private readonly DateTime? _startDate;
+
+    public BalancesRenderer(DateTime? startDate)
     {
+        this._startDate = startDate;
         var response1 = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("Do you want to trace balances or see the final snapshot?")
@@ -48,6 +51,7 @@ public class BalancesRenderer : TransactionRenderer
         }
 
         if (_onlyCritical && status == LocalBalance.ProcessingStatus.Processed) return;
+        if (_startDate.HasValue && tx.Date < _startDate) return;
 
         AnsiConsole.Clear();
         RenderBalances(current, balances);

@@ -28,15 +28,22 @@ try
     {
         case traceBalances:
         {
-            var balancesRenderer = new BalancesRenderer();
             var transactions = await ReadAllTransactions();
-            new BalanceTxProcessor().AnalyzeBalances(transactions, balancesRenderer);
+            
+            var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("Start date?"));
+            var balancesRenderer = new BalancesRenderer(startDate);
+            var balanceProcessor = new BalanceTxProcessor();
+            
+            balanceProcessor.AnalyzeBalances(transactions, balancesRenderer);
+            balanceProcessor.WriteTotalQuantityHistoryToCsv("total_quantity_history_balances.csv");
             break;
         }
         case traceTaxLots:
         {
             var transactions = await ReadAllTransactions();
-            var taxLotsRenderer = new TaxLotsRenderer();
+            
+            var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("Start date?"));
+            var taxLotsRenderer = new TaxLotsRenderer(startDate);
             var taxLotsProcessor = new TaxLotProcessor();
 
             if (taxLotsRenderer.Trace)
