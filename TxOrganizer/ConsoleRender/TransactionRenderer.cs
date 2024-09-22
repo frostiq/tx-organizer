@@ -25,6 +25,7 @@ public class TransactionRenderer
         switch (tx.Type)
         {
             case TxType.Trade:
+            case TxType.Migration:
             case TxType.Spend:
             case TxType.Lost:
             case TxType.Gift:
@@ -32,12 +33,12 @@ public class TransactionRenderer
                 if (tx.BuyCurrency == TargetCurrency)
                 {
                     AnsiConsole.MarkupLine(
-                        $"[blue]Buy tx[/]: {tx.Type} {tx.SellAmount} {tx.SellCurrency} => [blue]{tx.BuyAmount} {tx.BuyCurrency}[/] on {tx.Location}");
+                        $"[blue]{tx.Type}[/]: {tx.SellAmount} {tx.SellCurrency} => [blue]{tx.BuyAmount} {tx.BuyCurrency}[/] on {tx.Location}");
                 }
                 else
                 {
                     AnsiConsole.MarkupLine(
-                        $"[darkorange]Sell tx[/]: {tx.Type} [darkorange]{tx.SellAmount} {tx.SellCurrency}[/] => {tx.BuyAmount} {tx.BuyCurrency} from {tx.Location}");
+                        $"[darkorange]{tx.Type}[/]: [darkorange]{tx.SellAmount} {tx.SellCurrency}[/] => {tx.BuyAmount} {tx.BuyCurrency} from {tx.Location}");
                     if (remaining > 0 || sold > 0)
                     {
                         AnsiConsole.MarkupLine($"Sold in the highlighted tax lot: {sold} {tx.SellCurrency}");
@@ -53,6 +54,10 @@ public class TransactionRenderer
                 AnsiConsole.MarkupLine(
                     $"[darkorange]{tx.Type}: {tx.SellAmount} {tx.SellCurrency}[/] from {tx.Location}");
                 break;
+            case TxType.Income:
+            case TxType.Airdrop:
+            case TxType.Borrow:
+            case TxType.Repay:
             default:
                 AnsiConsole.MarkupLine($"{tx}");
                 break;
