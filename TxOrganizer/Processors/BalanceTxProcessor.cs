@@ -1,3 +1,4 @@
+using CsvHelper;
 using TxOrganizer.ConsoleRender;
 using TxOrganizer.DTO;
 
@@ -5,6 +6,8 @@ namespace TxOrganizer.Processors;
 
 public class BalanceTxProcessor
 {
+    private readonly IList<(DateTime, double)> _totalQuantityHistory = new List<(DateTime, double)>();
+    
     public void AnalyzeBalances(
         IEnumerable<Transaction> transactions,
         BalancesRenderer balancesRenderer)
@@ -30,6 +33,9 @@ public class BalanceTxProcessor
             
             var status = balance.Process(tx);
             balancesRenderer.TraceBalancesAction(tx, status, balance, balances.Values);
+            
+            var totalQuantity = balances.Sum(x => x.Value.Balance);
+            _totalQuantityHistory.Add((tx.Date, totalQuantity));
         }
         
         balancesRenderer.RenderBalances(null, balances.Values);
@@ -62,5 +68,16 @@ public class BalanceTxProcessor
                 return Enumerable.Empty<Transaction>().Append(result);
 
             });
+    }
+    
+    public void WriteTotalQuantityHistoryToCsv(string filePath)
+    {
+        using var writer = new StreamWriter(filePath);
+        using var csv = new CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture);
+        csv.WriteRecords(_totalQuantityHistory.Select(x => new
+        {
+            Time = x.Item1,
+            Quantity = x.Item2
+        }));
     }
 }
