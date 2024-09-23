@@ -1,7 +1,9 @@
-﻿using Spectre.Console;
+﻿using System.Text.RegularExpressions;
+using Spectre.Console;
 using TxOrganizer;
 using TxOrganizer.ConsoleRender;
 using TxOrganizer.Database;
+using TxOrganizer.DataSource;
 using TxOrganizer.DTO;
 using TxOrganizer.Processors;
 
@@ -16,11 +18,12 @@ const string traceBalances = "Trace balances";
 const string traceTaxLots = "Trace tax lots";
 const string positionHistory = "Position history";
 const string importTransactions = "Import transactions";
+const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
 
 var action = AnsiConsole.Prompt(
     new SelectionPrompt<string>()
         .Title("What's would you like to do?")
-        .AddChoices(traceBalances, traceTaxLots, positionHistory, importTransactions));
+        .AddChoices(traceBalances, traceTaxLots, positionHistory, importTransactions, fetchBinanceTxHistory));
 
 try
 {
@@ -30,7 +33,7 @@ try
         {
             var transactions = await ReadAllTransactions();
             
-            var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("Start date?"));
+            var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("Start date?").AllowEmpty());
             var balancesRenderer = new BalancesRenderer(startDate);
             var balanceProcessor = new BalanceTxProcessor();
             
@@ -42,7 +45,7 @@ try
         {
             var transactions = await ReadAllTransactions();
             
-            var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("Start date?"));
+            var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("Start date?").AllowEmpty());
             var taxLotsRenderer = new TaxLotsRenderer(startDate);
             var taxLotsProcessor = new TaxLotProcessor();
 
@@ -79,6 +82,27 @@ try
         {
             var transactions = csvSource.LoadTransactions();
             repository.ImportTransactions(transactions);
+            break;
+        }
+        case fetchBinanceTxHistory:
+        {
+            var fetcher = new BinanceTxHistoryFetcher();
+
+            var lines = new List<string>();
+            while (true)
+            {
+                var line = AnsiConsole.Prompt(new TextPrompt<string>("Enter your headers (or 'END' to finish):"));
+                if (line.ToUpper() == "END")
+                {
+                    break;
+                }
+                lines.Add(line);
+            }
+            var rawHeaders = string.Join("\n", lines);
+            var matches = new Regex("-H '([^:;]+)[:;] ([^']+)").Matches(rawHeaders);
+            var headers = matches.ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
+            var withdrawals = await fetcher.FetchWithdrawalHistory(headers);
+            fetcher.WriteTransactionHistoryToCsv("binance-withdrawals.csv", withdrawals);
             break;
         }
     }
