@@ -25,7 +25,7 @@ public class CoinGeckoPriceFetcher
 
         var prices = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, double>>>(response);
 
-        var result = prices.ToDictionary(kvp => coinIdsMapping[kvp.Key], kvp => kvp.Value["usd"]);
+        var result = prices!.ToDictionary(kvp => coinIdsMapping[kvp.Key], kvp => kvp.Value["usd"]);
 
         if (tokenSymbols.Contains("ETH2.0"))
         {

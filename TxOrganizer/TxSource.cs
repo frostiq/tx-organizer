@@ -25,6 +25,8 @@ public class TxSource
         while (!parser.EndOfData)
         {
             var fields = parser.ReadFields();
+            if (fields == null) throw new ArgumentNullException(nameof(fields));
+            
             var tx = BuildTransaction(fields);
             transactions.Add(tx);
         }

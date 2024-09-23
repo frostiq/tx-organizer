@@ -19,11 +19,18 @@ const string traceTaxLots = "Trace tax lots";
 const string positionHistory = "Position history";
 const string importTransactions = "Import transactions";
 const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
+const string analyzeUnmatchedDepositWithdrawals = "Analyze deposit/withdrawal missmatch";
 
 var action = AnsiConsole.Prompt(
     new SelectionPrompt<string>()
         .Title("What's would you like to do?")
-        .AddChoices(traceBalances, traceTaxLots, positionHistory, importTransactions, fetchBinanceTxHistory));
+        .AddChoices(
+            traceBalances,
+            traceTaxLots, 
+            positionHistory, 
+            importTransactions, 
+            fetchBinanceTxHistory, 
+            analyzeUnmatchedDepositWithdrawals));
 
 try
 {
@@ -103,6 +110,21 @@ try
             var headers = matches.ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
             var withdrawals = await fetcher.FetchWithdrawalHistory(headers);
             fetcher.WriteTransactionHistoryToCsv("binance-withdrawals.csv", withdrawals);
+            break;
+        }
+        case analyzeUnmatchedDepositWithdrawals:
+        {
+            var targetCurrency = AnsiConsole.Prompt(new SelectionPrompt<string>()
+                .Title("Base tracking currency")
+                .AddChoices("ETH", "BTC", "USDC", "USDT", "DAI", "COMP", "MKR", "UNI", "MATIC", "SOL"));
+            
+            var processor = new DepositWithdrawalMatchProcessor();
+            var renderer = new UnmatchedDepoistWithdrawalsRenderer();
+            var transactions = await ReadAllTransactions();
+            
+            var (unmatchedDeposits, unmatchedWithdrawals) = await processor.AnalyzeDepositWithdrawals(transactions, targetCurrency);
+            
+            renderer.RenderUnmatchedDepositsAndWithdrawals(unmatchedDeposits, unmatchedWithdrawals);
             break;
         }
     }
