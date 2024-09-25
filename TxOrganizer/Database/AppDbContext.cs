@@ -1,17 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using TxOrganizer.DTO;
 
+namespace TxOrganizer.Database;
+
 public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
     
-    public DbSet<CoinGeckoId> CoinGeckoIds { get; set; }
+    public DbSet<CoinGeckoId> CoinGeckoIds => Set<CoinGeckoId>();
     
-    public DbSet<Transaction> Transactions { get; set; }
-
-    public DbSet<Setting> Settings { get; set; }
+    public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<Setting> Settings => Set<Setting>();
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

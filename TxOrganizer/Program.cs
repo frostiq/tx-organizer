@@ -1,4 +1,5 @@
 ﻿using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Spectre.Console;
 using TxOrganizer;
 using TxOrganizer.ConsoleRender;
@@ -7,38 +8,42 @@ using TxOrganizer.DataSource;
 using TxOrganizer.DTO;
 using TxOrganizer.Processors;
 
-var dbContextFactory = new AppDbContextFactory();
-var dbContext = dbContextFactory.CreateDbContext(Array.Empty<string>());
-var repository = new FinancialDatabaseRepository(dbContext);
-var settingsRepository = new SettingsRepository(dbContext);
-var coinGeckoPriceFetcher = new CoinGeckoPriceFetcher(dbContext);
-var csvSource = new TxSource(settingsRepository);
-
-const string traceBalances = "Trace balances";
-const string traceTaxLots = "Trace tax lots";
-const string positionHistory = "Position history";
-const string importTransactions = "Import transactions";
-const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
-const string analyzeUnmatchedDepositWithdrawals = "Analyze deposit/withdrawal missmatch";
-
-var action = AnsiConsole.Prompt(
-    new SelectionPrompt<string>()
-        .Title("What's would you like to do?")
-        .AddChoices(
-            traceBalances,
-            traceTaxLots, 
-            positionHistory, 
-            importTransactions, 
-            fetchBinanceTxHistory, 
-            analyzeUnmatchedDepositWithdrawals));
-
 try
 {
+    var dbContextFactory = new AppDbContextFactory();
+    var dbContext = dbContextFactory.CreateDbContext(Array.Empty<string>());
+    
+    AnsiConsole.WriteLine("Creating local database...");
+    dbContext.Database.Migrate();
+    
+    var repository = new FinancialDatabaseRepository(dbContext);
+    var settingsRepository = new SettingsRepository(dbContext);
+    var coinGeckoPriceFetcher = new CoinGeckoPriceFetcher(dbContext);
+    var csvSource = new TxSource(settingsRepository);
+
+    const string traceBalances = "Trace balances";
+    const string traceTaxLots = "Trace tax lots";
+    const string positionHistory = "Position history";
+    const string importTransactions = "Import transactions";
+    const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
+    const string analyzeUnmatchedDepositWithdrawals = "Analyze deposit/withdrawal missmatch";
+
+    var action = AnsiConsole.Prompt(
+        new SelectionPrompt<string>()
+            .Title("What's would you like to do?")
+            .AddChoices(
+                traceBalances,
+                traceTaxLots, 
+                positionHistory, 
+                importTransactions, 
+                fetchBinanceTxHistory, 
+                analyzeUnmatchedDepositWithdrawals));
+
     switch (action)
     {
         case traceBalances:
         {
-            var transactions = await ReadAllTransactions();
+            var transactions = await ReadAllTransactions(repository);
             
             var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("Start date?").AllowEmpty());
             var balancesRenderer = new BalancesRenderer(startDate);
@@ -50,7 +55,7 @@ try
         }
         case traceTaxLots:
         {
-            var transactions = await ReadAllTransactions();
+            var transactions = await ReadAllTransactions(repository);
             
             var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("Start date?").AllowEmpty());
             var taxLotsRenderer = new TaxLotsRenderer(startDate);
@@ -77,7 +82,7 @@ try
         }
         case positionHistory:
         {
-            var transactions = await ReadAllTransactions();
+            var transactions = await ReadAllTransactions(repository);
             var positionsRenderer = new PositionsRenderer();
             var positionProcessor = new PositionProcessor(coinGeckoPriceFetcher);
             var (positions, unmatchedSpends) = await AnsiConsole.Status()
@@ -120,7 +125,7 @@ try
             
             var processor = new DepositWithdrawalMatchProcessor();
             var renderer = new UnmatchedDepoistWithdrawalsRenderer();
-            var transactions = await ReadAllTransactions();
+            var transactions = await ReadAllTransactions(repository);
             
             var (unmatchedDeposits, unmatchedWithdrawals) = await processor.AnalyzeDepositWithdrawals(transactions, targetCurrency);
             
@@ -134,7 +139,7 @@ catch (ApplicationException e)
 }
 
 // Read transactions function
-async Task<IEnumerable<Transaction>> ReadAllTransactions()
+async Task<List<Transaction>> ReadAllTransactions(FinancialDatabaseRepository repository)
 {
     return await AnsiConsole.Status()
         .StartAsync("Loading transactions from database...", _ => repository.ReadAllTransactions());
