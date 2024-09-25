@@ -17,25 +17,21 @@ public class DepositWithdrawalMatchProcessor
     }
 
     public async Task<(IEnumerable<Transaction> unmatchedDeposits, IEnumerable<Transaction> unmatchedWithdrawals)>
-        AnalyzeDepositWithdrawals(IEnumerable<Transaction> transactions, string targetCurrency)
+        AnalyzeDepositWithdrawals(ICollection<Transaction> transactions, string targetCurrency)
     {
-        var sortedTransactions = transactions
-            .Where(x => (x.Type is TxType.Deposit && x.BuyCurrency == targetCurrency && x.BuyAmount > 0) ||
-                        (x.Type is TxType.Withdrawal && x.SellCurrency == targetCurrency));
-
         var unmatchedDeposits = new List<Transaction>();
 
-        var txPairs = sortedTransactions.Where(x => x.Type is TxType.Withdrawal)
+        var txPairs = transactions.Where(x => x.Type is TxType.Withdrawal && x.SellCurrency == targetCurrency)
             .Select(tx => new TxPair(tx))
             .ToList();
 
-        foreach (var tx in sortedTransactions.Where(x => x.Type is TxType.Deposit))
+        foreach (var tx in transactions.Where(x => x.Type is TxType.Deposit && x.BuyCurrency == targetCurrency && x.BuyAmount > 0))
         {
             var pair = txPairs.FirstOrDefault(x =>
                 x.Withdrawal.SellCurrency == tx.BuyCurrency
                 && x.Deposit is null
-                && Math.Abs(x.Withdrawal.SellAmount - tx.BuyAmount) < 0.01
-                && x.Withdrawal.Date - tx.Date < TimeSpan.FromDays(1));
+                && Math.Abs(x.Withdrawal.SellAmount - tx.BuyAmount) / tx.BuyAmount < 0.01
+                && (x.Withdrawal.Date - tx.Date).Duration() < TimeSpan.FromDays(1));
 
             if (pair is not null)
             {
