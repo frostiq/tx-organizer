@@ -8,22 +8,33 @@ namespace TxOrganizer.DataSource
 {
     public class BinanceTxHistoryFetcher
     {
-        private static readonly HttpClient Client = new HttpClient();
+        private readonly HttpClient _client = new HttpClient();
         
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
         };
+        
+        public Task<List<Deposit>> FetchDepositHistory(Dictionary<string, string> headers)
+        {
+            const string url = "https://www.binance.com/bapi/capital/v1/private/capital/deposit/list";
+            return FetchTxHistory<Deposit>(url, headers);
+        }
 
-        public async Task<List<Withdrawal>> FetchWithdrawalHistory(Dictionary<string, string> headers)
+        public Task<List<Withdrawal>> FetchWithdrawalHistory(Dictionary<string, string> headers)
         {
             const string url = "https://www.binance.com/bapi/capital/v1/private/capital/withdraw/list";
-            var withdrawals = new List<Withdrawal>();
+            return FetchTxHistory<Withdrawal>(url, headers);
+        }
+
+        private async Task<List<T>> FetchTxHistory<T>(string url, Dictionary<string, string> headers)
+        {
+            var transactions = new List<T>();
 
             // Add headers to HttpClient
             foreach (var header in headers.Where(header => header.Key.ToUpper() != "CONTENT-TYPE"))
             {
-                Client.DefaultRequestHeaders.Add(header.Key, header.Value);
+                _client.DefaultRequestHeaders.Add(header.Key, header.Value);
             }
             
             const int startYear = 2017;
@@ -53,7 +64,7 @@ namespace TxOrganizer.DataSource
                     var responseContent = string.Empty;
                     try
                     {
-                        var response = await Client.PostAsync(url, content);
+                        var response = await _client.PostAsync(url, content);
                         response.EnsureSuccessStatusCode();
 
                         var responseStream = await response.Content.ReadAsStreamAsync();
@@ -63,14 +74,14 @@ namespace TxOrganizer.DataSource
                         }
                         using var streamReader = new StreamReader(responseStream);
                         responseContent = await streamReader.ReadToEndAsync();
-                        var responseModel = JsonSerializer.Deserialize<ResponseModel>(responseContent, JsonOptions);
+                        var responseModel = JsonSerializer.Deserialize<ResponseModel<T>>(responseContent, JsonOptions);
                         
                         if (responseModel.Data.Rows.Count == 0)
                         {
                             break;
                         }
 
-                        withdrawals.AddRange(responseModel.Data.Rows);
+                        transactions.AddRange(responseModel.Data.Rows);
                         pageOffset += pageSize;
                     }
                     catch (Exception e)
@@ -82,32 +93,31 @@ namespace TxOrganizer.DataSource
                 }
             }
 
-            return withdrawals;
+            return transactions;
         }
         
-        public void WriteTransactionHistoryToCsv(string filePath, IEnumerable<Withdrawal> withdrawals)
+        public void WriteTransactionHistoryToCsv<T>(string filePath, IEnumerable<T> transactions)
         {
             using var writer = new StreamWriter(filePath);
             using var csv = new CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture);
-            csv.WriteRecords(withdrawals);
+            csv.WriteRecords(transactions);
+        }
+        
+        private class ResponseModel<T>
+        {
+            public string Code { get; set; }
+            public string Message { get; set; }
+            public string MessageDetail { get; set; }
+            public DataModel<T> Data { get; set; }
+            public bool Success { get; set; }
+        }
+
+        private class DataModel<T>
+        {
+            public int Total { get; set; }
+            public List<T> Rows { get; set; }
         }
     }
-
-    public class ResponseModel
-    {
-        public string Code { get; set; }
-        public string Message { get; set; }
-        public string MessageDetail { get; set; }
-        public DataModel Data { get; set; }
-        public bool Success { get; set; }
-    }
-
-    public class DataModel
-    {
-        public int Total { get; set; }
-        public List<Withdrawal> Rows { get; set; }
-    }
-
     public class Withdrawal
     {
         public string Id { get; set; }
@@ -129,10 +139,43 @@ namespace TxOrganizer.DataSource
         public string TxUrl { get; set; }
         public string StatusName { get; set; }
         public string ApplyTimeStr { get; set; }
-        public ulong TransferType { get; set; }
+        public ulong? TransferType { get; set; }
         public string Network { get; set; }
         public ulong WalletType { get; set; }
         public string TxKey { get; set; }
         public string ExtensionInfo { get; set; }
     }
+    
+    public class Deposit
+    {
+        public string Id { get; set; }
+        public string TransferAmount { get; set; }
+        public ulong InsertTime { get; set; }
+        public ulong Status { get; set; }
+        public string AddressUrl { get; set; }
+        public ulong UserId { get; set; }
+        public ulong TranId { get; set; }
+        public string Coin { get; set; }
+        public string Address { get; set; }
+        public string AddressTag { get; set; }
+        public string AssetLabel { get; set; }
+        public string TxId { get; set; }
+        public ulong? ConfirmType { get; set; }
+        public ulong? CurConfirmTimes { get; set; }
+        public ulong? ConfirmTimes { get; set; }
+        public ulong? UnlockConfirm { get; set; }
+        public string Bundle { get; set; }
+        public ulong? EstimatedArrivalTime { get; set; }
+        public string EstimatedUnlockTime { get; set; }
+        public string TxUrl { get; set; }
+        public string StatusName { get; set; }
+        public ulong? TransferType { get; set; }
+        public string Comments { get; set; }
+        public string Network { get; set; }
+        public ulong WalletType { get; set; }
+        public ulong? SelfReturnStatus { get; set; }
+        public ulong? GtrStatus { get; set; }
+        public string RetrieveStatus { get; set; }
+    }
+
 }
