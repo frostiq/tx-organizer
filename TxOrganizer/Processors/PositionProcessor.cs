@@ -23,7 +23,6 @@ public class PositionProcessor
         var positions = new List<Position>();
         var unmatchedSpends = new List<TxSpend>();
         var selectedTransactions = transactions
-            .Where(x => _buyTxTypes.Contains(x.Type) || _sellTxTypes.Contains(x.Type))
             .Where(x => x.BuyCurrency != "USDTPROFIT" && x.SellCurrency != "USDTPROFIT")
             .OrderBy(x => x.Date);
 

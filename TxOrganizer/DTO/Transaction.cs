@@ -13,7 +13,8 @@ public enum TxType
     Airdrop = 8,
     Borrow = 9,
     Repay = 10,
-    Stolen = 11
+    Stolen = 11,
+    Mining = 12
 }
 
 public class Transaction

@@ -16,7 +16,7 @@ public class CoinGeckoPriceFetcherTests
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
         optionsBuilder.UseInMemoryDatabase("TestDb");
         _dbContext = new AppDbContext(optionsBuilder.Options);
-        _dbContext.Database.EnsureCreated();
+        _dbContext.Database.Migrate();
         
         // Add test data to the CoinGeckoIds DbSet
         // _dbContext.CoinGeckoIds.Add(new CoinGeckoId { Symbol = "btc", CoinId = "bitcoin" });
