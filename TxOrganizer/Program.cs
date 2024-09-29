@@ -11,6 +11,14 @@ using TxOrganizer.DataSource;
 using TxOrganizer.DTO;
 using TxOrganizer.Processors;
 
+const string traceBalances = "Trace balances";
+const string traceTaxLots = "Trace tax lots";
+const string positionHistory = "Position history";
+const string importTransactions = "Import transactions";
+const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
+const string analyzeUnmatchedDepositWithdrawals = "Analyze deposit/withdrawal missmatch";
+const string exit = "Exit";
+
 try
 {
     var dbContextFactory = new AppDbContextFactory();
@@ -25,14 +33,6 @@ try
     var settingsRepository = new SettingsRepository(dbContext);
     var coinGeckoPriceFetcher = new CoinGeckoPriceFetcher(dbContext);
     var csvSource = new TxSource(settingsRepository);
-
-    const string traceBalances = "Trace balances";
-    const string traceTaxLots = "Trace tax lots";
-    const string positionHistory = "Position history";
-    const string importTransactions = "Import transactions";
-    const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
-    const string analyzeUnmatchedDepositWithdrawals = "Analyze deposit/withdrawal missmatch";
-    const string exit = "Exit";
 
     string? action = null;
     while (action != exit)
@@ -101,8 +101,17 @@ try
                 var transactions = await ReadAllTransactions(repository);
                 var positionsRenderer = new PositionsRenderer();
                 var positionProcessor = new PositionProcessor(coinGeckoPriceFetcher);
-                var (positions, unmatchedSpends) = await AnsiConsole.Status()
-                    .StartAsync("Building positions...", _ => positionProcessor.BuildPositions(transactions));
+                
+                var (positions, unmatchedSpends) = await AnsiConsole.Progress()
+                    .StartAsync(async ctx =>
+                    {
+                        var task = ctx.AddTask("Building positions...", maxValue: 1.0);
+                        var res = await positionProcessor.BuildPositions(transactions, task);
+                        task.Value = task.MaxValue;
+                        return res;
+                    });
+
+                
                 positionsRenderer.PrintPositions(positions, unmatchedSpends);
                 break;
             }
@@ -174,8 +183,9 @@ try
         }
     }
 }
-catch (ApplicationException e)
+catch (Exception e)
 {
+    AnsiConsole.WriteException(e);
 }
 
 // Read transactions function

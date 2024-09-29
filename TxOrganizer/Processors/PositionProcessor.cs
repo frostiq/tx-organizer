@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Spectre.Console;
 using TxOrganizer.DataSource;
 using TxOrganizer.DTO;
 
@@ -18,13 +19,14 @@ public class PositionProcessor
     }
 
     public async Task<(IEnumerable<Position>, IEnumerable<TxSpend>)> BuildPositions(
-        IEnumerable<Transaction> transactions)
+        IEnumerable<Transaction> transactions, ProgressTask task)
     {
         var positions = new List<Position>();
         var unmatchedSpends = new List<TxSpend>();
         var selectedTransactions = transactions
             .Where(x => x.BuyCurrency != "USDTPROFIT" && x.SellCurrency != "USDTPROFIT")
-            .OrderBy(x => x.Date);
+            .OrderBy(x => x.Date)
+            .ToList();
 
         foreach (var tx in selectedTransactions)
         {
@@ -76,6 +78,8 @@ public class PositionProcessor
                     (remainingFee, var sold) = position.SpendFee(tx, remainingFee);
                 }
             }
+            
+            task?.Increment(1.0 / selectedTransactions.Count);
         }
 
         var tokenSymbolsToFetch = positions.Where(x => !x.Sold).Select(x => x.Currency).Distinct().ToList();
