@@ -15,7 +15,7 @@ public class TaxLotsRenderer: TransactionRenderer
         var response1 = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("Do you want to trace balances or see the final snapshot?")
-                .AddChoices("Trace", "Snapshot"));
+                .AddChoices("Snapshot", "Trace"));
         _trace = string.Equals(response1, "Trace");
     }
 

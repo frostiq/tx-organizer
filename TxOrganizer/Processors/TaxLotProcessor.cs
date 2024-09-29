@@ -17,9 +17,7 @@ public class TaxLotProcessor
         var taxLots = new Dictionary<string, List<TaxLot>>();
         var unmatchedSpends = new List<TxSpend>();
 
-        var selectedTransactions = transactions
-            .Where(x => _buyTxTypes.Contains(x.Type) || _sellTxTypes.Contains(x.Type))
-            .OrderBy(x => x.Date).ToList();
+        var selectedTransactions = transactions.OrderBy(x => x.Date).ToList();
         
         foreach (var tx in selectedTransactions)
         {
@@ -52,6 +50,21 @@ public class TaxLotProcessor
                     (remaining, var sold) = taxLot.Sell(tx, remaining);
 
                     taxLotsRenderer.TraceTaxLotsAction(tx, remaining, sold, taxLot, taxLots.SelectMany(x => x.Value));
+                }
+            }
+            
+            var remainingFee = tx.Fee;
+            if (!string.IsNullOrEmpty(tx.FeeCurrency) && (targetCurrency == null || tx.FeeCurrency == targetCurrency) && tx.FeeCurrency != "USD")
+            {
+                while (remainingFee > 0)
+                {
+                    var taxLot = FindHiFoTaxLot(tx.FeeCurrency, taxLots);
+                    if (taxLot is null)
+                    {
+                        break;
+                    }
+
+                    (remainingFee, var sold) = taxLot.SpendFee(tx, remainingFee);
                 }
             }
 
