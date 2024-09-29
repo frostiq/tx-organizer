@@ -21,13 +21,13 @@ public class TaxLotsRenderer: TransactionRenderer
 
     public bool Trace => _trace;
 
-    public void TraceTaxLotsAction(Transaction tx, double remaining, double sold, TaxLot currentLot,
+    public bool TraceTaxLotsAction(Transaction tx, double remaining, double sold, TaxLot currentLot,
         IEnumerable<TaxLot> taxLots)
     {
-        if (!Trace) return;
-        if (tx.BuyCurrency != TargetCurrency && tx.SellCurrency != TargetCurrency) return;
-        if (currentLot.Currency != TargetCurrency) return;
-        if (_startDate.HasValue && tx.Date < _startDate) return;
+        if (!Trace) return true;
+        if (tx.BuyCurrency != TargetCurrency && tx.SellCurrency != TargetCurrency) return true;
+        if (currentLot.Currency != TargetCurrency) return true;
+        if (_startDate.HasValue && tx.Date < _startDate) return true;
         
         AnsiConsole.Clear();
         RenderTaxLots(currentLot, taxLots);
@@ -36,15 +36,12 @@ public class TaxLotsRenderer: TransactionRenderer
         if (!string.IsNullOrEmpty(LocationFilter))
         {
             var locationMatch = tx.Location?.Contains(LocationFilter) ?? false;
-            if (!locationMatch) return;
+            if (!locationMatch) return true;
         }
 
-        var input = AnsiConsole.Confirm("Continue");
+        var @continue = AnsiConsole.Confirm("Continue");
 
-        if (!input)
-        {
-            throw new Exception();
-        }
+        return @continue;
     }
     
     public void RenderTaxLots(TaxLot? currentLot, IEnumerable<TaxLot> allLots)

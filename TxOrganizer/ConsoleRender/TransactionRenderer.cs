@@ -12,7 +12,7 @@ public class TransactionRenderer
     {
         TargetCurrency = AnsiConsole.Prompt(new SelectionPrompt<string>()
             .Title("Base tracking currency")
-            .AddChoices("ETH", "BTC", "USDC", "USDT", "DAI", "COMP", "MKR", "UNI", "MATIC", "SOL"));
+            .AddChoices("ETH", "BTC", "WETH", "USDC", "USDT", "DAI", "COMP", "MKR", "UNI", "MATIC", "SOL"));
         
         LocationFilter = AnsiConsole.Ask("Location filter:", string.Empty);
     }

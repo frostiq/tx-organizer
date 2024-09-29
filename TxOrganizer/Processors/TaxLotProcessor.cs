@@ -34,7 +34,8 @@ public class TaxLotProcessor
                 }
                 taxLotsList.Add(newLot);
                 
-                taxLotsRenderer.TraceTaxLotsAction(tx, 0, 0, newLot, taxLots.SelectMany(x => x.Value));
+                var @continue = taxLotsRenderer.TraceTaxLotsAction(tx, 0, 0, newLot, taxLots.SelectMany(x => x.Value));
+                if (!@continue) break;
             }
 
             if ((targetCurrency == null || tx.SellCurrency == targetCurrency) && tx.SellCurrency != "USD" && _sellTxTypes.Contains(tx.Type))

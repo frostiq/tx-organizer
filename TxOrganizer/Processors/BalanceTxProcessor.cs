@@ -32,7 +32,8 @@ public class BalanceTxProcessor
             }
             
             var status = balance.Process(tx);
-            balancesRenderer.TraceBalancesAction(tx, status, balance, balances.Values);
+            var @continue = balancesRenderer.TraceBalancesAction(tx, status, balance, balances.Values);
+            if (!@continue) break;
             
             var totalQuantity = balances.Sum(x => x.Value.Balance);
             _totalQuantityHistory.Add((tx.Date, totalQuantity));

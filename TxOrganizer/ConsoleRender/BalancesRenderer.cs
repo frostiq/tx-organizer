@@ -17,7 +17,7 @@ public class BalancesRenderer : TransactionRenderer
         var response1 = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("Do you want to trace balances or see the final snapshot?")
-                .AddChoices("Trace", "Snapshot"));
+                .AddChoices("Snapshot", "Trace"));
         _trace = string.Equals(response1, "Trace");
         
         if (!_trace) return;
@@ -29,10 +29,10 @@ public class BalancesRenderer : TransactionRenderer
         _onlyCritical = string.Equals(response2, "Critical transactions");
     }
 
-    public void TraceBalancesAction(Transaction tx, LocalBalance.ProcessingStatus status, LocalBalance current,
+    public bool TraceBalancesAction(Transaction tx, LocalBalance.ProcessingStatus status, LocalBalance current,
         IEnumerable<LocalBalance> balances)
     {
-        if (!_trace || status == LocalBalance.ProcessingStatus.NotRelevant) return;
+        if (!_trace || status == LocalBalance.ProcessingStatus.NotRelevant) return true;
 
         if (!string.IsNullOrEmpty(LocationFilter))
         {
@@ -41,17 +41,17 @@ public class BalancesRenderer : TransactionRenderer
             if (exactTokens.Length > 1)
             {
                 var locationMatch = exactTokens.Contains(tx.Location);
-                if (!locationMatch) return;
+                if (!locationMatch) return true;
             }
             else
             {
                 var locationMatch = string.Equals(tx.Location, LocationFilter);
-                if (!locationMatch) return;
+                if (!locationMatch) return true;
             }
         }
 
-        if (_onlyCritical && status == LocalBalance.ProcessingStatus.Processed) return;
-        if (_startDate.HasValue && tx.Date < _startDate) return;
+        if (_onlyCritical && status == LocalBalance.ProcessingStatus.Processed) return true;
+        if (_startDate.HasValue && tx.Date < _startDate) return true;
 
         AnsiConsole.Clear();
         RenderBalances(current, balances);
@@ -63,8 +63,8 @@ public class BalancesRenderer : TransactionRenderer
         }
 
         Console.WriteLine();
-        var input = AnsiConsole.Confirm("Continue");
-        if (!input) throw new ApplicationException();
+        var @continue = AnsiConsole.Confirm("Continue");
+        return @continue;
     }
 
     public void RenderBalances(LocalBalance? currentBalance, IEnumerable<LocalBalance> allBalances)
