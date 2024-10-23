@@ -23,4 +23,8 @@
       <ProjectReference Include="..\TxOrganizer\TxOrganizer.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <None Include="bin\Debug\net7.0\data\Financial.db" />
+    </ItemGroup>
+
 </Project>

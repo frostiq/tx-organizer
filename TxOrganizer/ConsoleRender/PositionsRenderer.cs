@@ -46,7 +46,8 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
             x.Currency,
             x.Date,
             x.Sold,
-            ClosingDate = x.Sold ? x.SellTransactions.Max(x => x.Tx.Date) : (DateTime?)null,
+            x.IsArbitrage,
+            ClosingDate = x.Sold && x.TxSpends.Any() ? x.TxSpends.Max(x => x.Tx.Date) : (DateTime?)null,
             MaxQty = $"{x.TotalAmount:N} {x.Currency}",
             RemainingAmount = $"{x.RemainingAmount:N} {x.Currency}",
             AvgPrice = x.CostBasis / x.TotalAmount,
@@ -60,7 +61,7 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
         {
             var style = !position.Sold ? Style.Parse("blue") : Style.Plain;
             table.AddRow(
-                new Markup(Markup.Escape(position.Currency), style), // Asset
+                new Markup(Markup.Escape(position.Currency + (position.IsArbitrage ? "-arb":"")), style), // Asset
                 new Markup($"{position.Date:d}", style), // Opened Date
                 new Markup($"{position.ClosingDate:d}"), // Closing date
                 new Markup(Markup.Escape(position.MaxQty), style), // Max Qty
