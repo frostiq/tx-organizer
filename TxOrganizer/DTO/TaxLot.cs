@@ -12,14 +12,14 @@ public class TaxLot
 
     public Transaction BuyTransaction { get; }
     
-    public bool IsArbitrage { get; }
+    public bool CanBeReopened { get; }
 
-    public TaxLot(Transaction tx, bool isArbitrage = false)
+    public TaxLot(Transaction tx, bool canBeReopened = false)
     {
         if (!SupportedBuyTxTypes.Contains(tx.Type)) throw new ArgumentException($"Unsupported tx type: {tx.Type}");
         
         BuyTransaction = tx;
-        IsArbitrage = isArbitrage;
+        CanBeReopened = canBeReopened;
         _txSpends = new List<TxSpend>();
         _feeSpendTransactions = new List<TxSpend>();
     }
@@ -49,10 +49,10 @@ public class TaxLot
     /// <exception cref="ArgumentException"></exception>
     public (double remaining, double sold) Sell(Transaction tx, double sellAmount)
     {
-        if (Sold && !IsArbitrage) throw new ApplicationException("Can't sell against sold tax lot");
+        if (Sold && !CanBeReopened) throw new ApplicationException("Can't sell against sold tax lot");
         if (sellAmount <= 0) throw new ArgumentOutOfRangeException(nameof(sellAmount));
         if (tx.SellCurrency != Currency) throw new ArgumentException("Sell transaction has an invalid currency");
-        if (tx.Date < Date && !IsArbitrage) throw new ArgumentException("Sell transaction predates tax lot");
+        if (tx.Date < Date && !CanBeReopened) throw new ArgumentException("Sell transaction predates tax lot");
 
         var remaining = RemainingAmount;
         var sold = Math.Min(sellAmount, remaining);
@@ -66,7 +66,7 @@ public class TaxLot
     
     public (double remaining, double sold) SpendFee(Transaction tx, double spendAmount)
     {
-        if (Sold) throw new ApplicationException("Can't spemd against sold tax lot");
+        if (Sold && !CanBeReopened) throw new ApplicationException("Can't spend against sold tax lot");
         if (spendAmount <= 0) throw new ArgumentOutOfRangeException(nameof(spendAmount));
         if (tx.FeeCurrency != Currency) throw new ArgumentException("Fee spend transaction has an invalid currency");
         if (tx.Date < Date) throw new ArgumentException("Fee spend transaction predates tax lot");

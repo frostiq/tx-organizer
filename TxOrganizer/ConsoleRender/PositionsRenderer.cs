@@ -24,7 +24,8 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
         }
         
         var valueThreshold = AnsiConsole.Ask<double>("Value threshold, USD", 1000);
-        allPositions = allPositions.Where(x => x.CostBasis > valueThreshold || x.Proceeds > valueThreshold);
+        allPositions = allPositions.Where(x => x.CostBasis > valueThreshold || x.Proceeds > valueThreshold)
+            .OrderBy(x => x.Date);
 
         var totalCount = allPositions.Count();
 
@@ -33,7 +34,7 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
         table.AddColumn("Asset", column => { column.Footer("Total: " + totalCount); });
         table.AddColumn("Opened Date");
         table.AddColumn("Closing Date");
-        table.AddColumn("Max Qty");
+        table.AddColumn("Total Qty");
         table.AddColumn("Remaining Qty");
         table.AddColumn("Avg Cost");
         table.AddColumn("Market / Close Price");
@@ -41,14 +42,22 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
         table.AddColumn("Gain/Loss");
         table.AddColumn("ROI%");
 
+        string MapCurrency(Position position) =>
+            position.PositionType switch
+            {
+                PositionType.Investment => position.Currency,
+                PositionType.Arbitrage => $"{position.Currency} [ARB]",
+                PositionType.Perpetuals => $"{position.Currency} [PERP]",
+                _ => throw new ArgumentOutOfRangeException()
+            };
+
         var outputPositions = allPositions.Select(x => new
         {
-            x.Currency,
+            Currency = MapCurrency(x),
             x.Date,
             x.Sold,
-            x.IsArbitrage,
             ClosingDate = x.Sold && x.TxSpends.Any() ? x.TxSpends.Max(x => x.Tx.Date) : (DateTime?)null,
-            MaxQty = $"{x.TotalAmount:N} {x.Currency}",
+            TotalAmount = $"{x.TotalAmount:N} {x.Currency}",
             RemainingAmount = $"{x.RemainingAmount:N} {x.Currency}",
             AvgPrice = x.CostBasis / x.TotalAmount,
             LastPrice = x.Sold ? x.AverageExitPrice : x.CurrentPrice,
@@ -61,10 +70,10 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
         {
             var style = !position.Sold ? Style.Parse("blue") : Style.Plain;
             table.AddRow(
-                new Markup(Markup.Escape(position.Currency + (position.IsArbitrage ? "-arb":"")), style), // Asset
+                new Markup(Markup.Escape(position.Currency), style), // Asset
                 new Markup($"{position.Date:d}", style), // Opened Date
                 new Markup($"{position.ClosingDate:d}"), // Closing date
-                new Markup(Markup.Escape(position.MaxQty), style), // Max Qty
+                new Markup(Markup.Escape(position.TotalAmount), style), // Total Qty
                 new Markup(Markup.Escape(position.RemainingAmount), style), // Remaining Qty
                 new Markup($"{position.AvgPrice:C}", style), // Avg Price
                 new Markup(position.LastPrice.HasValue ? $"{position.LastPrice:C}" : "???", style), // Market / Close Price

@@ -1,13 +1,23 @@
 namespace TxOrganizer.DTO;
 
+public enum PositionType
+{
+    Investment,
+    Arbitrage,
+    Perpetuals
+}
+
 public class Position: TaxLot
 {
     private readonly List<Transaction> _buyTransactions;
     
+    public PositionType PositionType { get; }
+    
     public double? CurrentPrice { get; set; }
 
-    public Position(Transaction tx, bool isArbitrage = false) : base(tx, isArbitrage)
+    public Position(Transaction tx, PositionType positionType) : base(tx, positionType != PositionType.Investment)
     {
+        PositionType = positionType;
         _buyTransactions = new List<Transaction> { tx };
     }
     
@@ -29,7 +39,7 @@ public class Position: TaxLot
     public void Buy(Transaction tx)
     {
         if (!SupportedBuyTxTypes.Contains(tx.Type)) throw new ArgumentException($"Unsupported tx type: {tx.Type}");
-        if (Sold && !IsArbitrage) throw new ApplicationException("Can't buy into already sold tax lot");
+        if (Sold && !CanBeReopened) throw new ApplicationException("Can't buy into already sold position");
         if (tx.BuyCurrency != Currency) throw new ArgumentException("Buy transaction has an invalid currency");
         if (tx.Date < Date) throw new ArgumentException("Buy transaction predates position creation date: " + tx);
         

@@ -108,7 +108,10 @@ try
                     .StartAsync(async ctx =>
                     {
                         var task = ctx.AddTask("Building positions...", maxValue: 1.0);
-                        var res = await positionProcessor.BuildPositions(transactions, task);
+                        var res = await positionProcessor.BuildPositions(transactions, () =>
+                        {
+                            task.Increment(1.0 / transactions.Count);
+                        });
                         task.Value = task.MaxValue;
                         return res;
                     });
