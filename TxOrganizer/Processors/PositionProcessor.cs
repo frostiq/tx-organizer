@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Spectre.Console;
+using TxOrganizer.Database;
 using TxOrganizer.DataSource;
 using TxOrganizer.DTO;
 
@@ -8,6 +9,7 @@ namespace TxOrganizer.Processors;
 public class PositionProcessor
 {
     private readonly CoinGeckoPriceFetcher _coinGeckoPriceFetcher;
+    private readonly SettingsRepository _settingsRepository;
     private static readonly Regex NftCurrencyRegex = new Regex(@"^(.+)-\d", RegexOptions.Compiled);
 
     private readonly TxType[] _buyTxTypes = { TxType.Trade, TxType.Migration, TxType.Airdrop, TxType.Income };
@@ -15,9 +17,10 @@ public class PositionProcessor
     private readonly TxType[] _sellTxTypes =
         { TxType.Trade, TxType.Migration, TxType.Spend, TxType.Lost, TxType.Gift, TxType.Stolen };
 
-    public PositionProcessor(CoinGeckoPriceFetcher coinGeckoPriceFetcher)
+    public PositionProcessor(CoinGeckoPriceFetcher coinGeckoPriceFetcher, SettingsRepository settingsRepository)
     {
         _coinGeckoPriceFetcher = coinGeckoPriceFetcher;
+        _settingsRepository = settingsRepository;
     }
 
     public async Task<(IEnumerable<Position>, IEnumerable<TxSpend>)> BuildPositions(
@@ -85,7 +88,8 @@ public class PositionProcessor
         }
         
         // Arb positions post-processing
-        foreach (var targetPosition in positions.Where(x => x.Currency.Contains("")).ToList())
+        var arbCurrencies = _settingsRepository.GetSettings(SettingType.ArbPositionCurrency).Select(x => x.Key);
+        foreach (var targetPosition in positions.Where(x => arbCurrencies.Contains(x.Currency)).ToList())
         {
             var (arbPosition, deficit) = ExtractArbitragePosition(targetPosition);
             if (arbPosition is not null)
@@ -135,9 +139,10 @@ public class PositionProcessor
         // Identify arbitrage trades, when roughly same amount bought and sold within a day
         foreach (var sellTx in sellTransactions)
         {
-            var buyTx = position.BuyTransactions.FirstOrDefault(x =>
+            var buyTx = position.BuyTransactions.Where(x =>
                 Math.Abs(x.BuyAmount - sellTx.SellAmount) / sellTx.SellAmount < 0.03 &&
-                (x.Date - sellTx.Date).Duration() < TimeSpan.FromDays(1));
+                (x.Date - sellTx.Date).Duration() < TimeSpan.FromDays(1))
+                .MinBy(x => (x.Date - sellTx.Date).Duration());
 
             if (buyTx is null) continue;
 

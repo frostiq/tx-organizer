@@ -17,4 +17,10 @@ public class SettingsRepository
         var settings = _dbContext.Settings.Where(s => s.Type == type).ToList();
         return settings;
     }
+    
+    public void AddSetting(Setting setting)
+    {
+        _dbContext.Settings.Add(setting);
+        _dbContext.SaveChanges();
+    }
 }

@@ -17,6 +17,7 @@ const string positionHistory = "Position history";
 const string importTransactions = "Import transactions";
 const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
 const string analyzeUnmatchedDepositWithdrawals = "Analyze deposit/withdrawal missmatch";
+const string addSetting = "Add setting";
 const string exit = "Exit";
 
 try
@@ -44,8 +45,9 @@ try
                 traceTaxLots,
                 positionHistory,
                 importTransactions,
-                fetchBinanceTxHistory,
                 analyzeUnmatchedDepositWithdrawals,
+                fetchBinanceTxHistory,
+                addSetting,
                 exit);
         action = AnsiConsole.Prompt(selectionPrompt);
         AnsiConsole.Clear();
@@ -100,7 +102,7 @@ try
             {
                 var transactions = await ReadAllTransactions(repository);
                 var positionsRenderer = new PositionsRenderer();
-                var positionProcessor = new PositionProcessor(coinGeckoPriceFetcher);
+                var positionProcessor = new PositionProcessor(coinGeckoPriceFetcher, settingsRepository);
                 
                 var (positions, unmatchedSpends) = await AnsiConsole.Progress()
                     .StartAsync(async ctx =>
@@ -178,6 +180,23 @@ try
                     await processor.AnalyzeDepositWithdrawals(transactions, targetCurrency);
 
                 renderer.RenderUnmatchedDepositsAndWithdrawals(unmatchedDeposits, unmatchedWithdrawals);
+                break;
+            }
+            case addSetting:
+            {
+                
+                var type = AnsiConsole.Prompt(new SelectionPrompt<SettingType>()
+                    .Title("Select setting type")
+                    .AddChoices(Enum.GetValues<SettingType>()));
+                var key = AnsiConsole.Prompt(new TextPrompt<string>("Enter key:"));
+                var value = AnsiConsole.Prompt(new TextPrompt<string>("Enter value:").AllowEmpty());
+                var setting = new Setting
+                {
+                    Type = type,
+                    Key = key,
+                    Value = value
+                };
+                settingsRepository.AddSetting(setting);
                 break;
             }
         }
