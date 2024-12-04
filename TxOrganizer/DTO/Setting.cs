@@ -3,7 +3,8 @@ namespace TxOrganizer.DTO;
 public enum SettingType
 {
     LocationSourceMapping,
-    ArbPositionCurrency
+    ArbPositionCurrency,
+    PositionAnnotation
 }
 
 public class Setting

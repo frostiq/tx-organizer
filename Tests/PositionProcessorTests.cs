@@ -15,7 +15,8 @@ namespace Tests
             var dbContextFactory = new AppDbContextFactory();
             await using var dbContext = dbContextFactory.CreateDbContext(Array.Empty<string>());
             var coingeckoFetcher = new CoinGeckoPriceFetcher(dbContext);
-            var processor = new PositionProcessor(coingeckoFetcher);
+            var settingsRepository = new SettingsRepository(dbContext);
+            var processor = new PositionProcessor(coingeckoFetcher, settingsRepository);
             var repository = new FinancialDatabaseRepository(dbContext);
             var transactions = await repository.ReadAllTransactions();
 

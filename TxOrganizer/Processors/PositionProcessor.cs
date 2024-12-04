@@ -49,15 +49,22 @@ public class PositionProcessor
             }
         }
         
-        // Price updates
+        // Price updates and annotation
         var tokenSymbolsToFetch = positions.Where(x => !x.Sold).Select(x => x.Currency).Distinct().ToList();
         var currencyRates = await _coinGeckoPriceFetcher.GetPricesAsync(tokenSymbolsToFetch);
+        var annotations = _settingsRepository.GetSettings(SettingType.PositionAnnotation);
 
         foreach (var position in positions)
         {
             if (currencyRates.TryGetValue(position.Currency, out var price))
             {
                 position.CurrentPrice = price;
+            }
+            
+            var annotation = annotations.FirstOrDefault(x => x.Key == $"{position.Date:yyyy-MM-dd} {Enum.GetName(position.PositionType)} {position.Currency}");
+            if (annotation is not null)
+            {
+                position.Annotation = annotation.Value;
             }
         }
 

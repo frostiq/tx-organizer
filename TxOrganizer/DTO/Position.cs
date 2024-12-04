@@ -14,6 +14,8 @@ public class Position: TaxLot
     public PositionType PositionType { get; }
     
     public double? CurrentPrice { get; set; }
+    
+    public string? Annotation { get; set; }
 
     public Position(Transaction tx, PositionType positionType) : base(tx, positionType != PositionType.Investment)
     {

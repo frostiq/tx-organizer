@@ -101,7 +101,7 @@ try
             case positionHistory:
             {
                 var transactions = await ReadAllTransactions(repository);
-                var positionsRenderer = new PositionsRenderer();
+                var positionsRenderer = new PositionsRenderer(settingsRepository);
                 var positionProcessor = new PositionProcessor(coinGeckoPriceFetcher, settingsRepository);
                 
                 var (positions, unmatchedSpends) = await AnsiConsole.Progress()
@@ -187,7 +187,6 @@ try
             }
             case addSetting:
             {
-                
                 var type = AnsiConsole.Prompt(new SelectionPrompt<SettingType>()
                     .Title("Select setting type")
                     .AddChoices(Enum.GetValues<SettingType>()));
