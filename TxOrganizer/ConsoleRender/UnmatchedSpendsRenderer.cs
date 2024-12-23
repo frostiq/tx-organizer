@@ -19,8 +19,8 @@ public class UnmatchedSpendsRenderer
             var earliestDate = unmatchedSpendGroup.Min(x => x.Tx.Date);
             var latestDate = unmatchedSpendGroup.Max(x => x.Tx.Date);
             var group =
-                $" {unmatchedSpendGroup.Sum(x => x.Amount)} {unmatchedSpendGroup.Key} ({usdValue:C}) from {earliestDate} to {latestDate}";
-            var groupNode = root.AddNode(Markup.Escape(group));
+                $"{unmatchedSpendGroup.Sum(x => x.Amount)} {unmatchedSpendGroup.Key} ({usdValue:C}) from {earliestDate} to {latestDate}";
+            var groupNode = root.AddNode($"[yellow bold]{Markup.Escape(unmatchedSpendGroup.Key)}[/] – {Markup.Escape(group)}");
             foreach (var unmatchedSpend in unmatchedSpendGroup)
             {
                 groupNode.AddNode(Markup.Escape(unmatchedSpend.ToString()));

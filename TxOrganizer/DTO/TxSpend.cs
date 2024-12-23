@@ -16,6 +16,6 @@ public class TxSpend
 
     public override string ToString()
     {
-        return $"{Amount} {Tx.SellCurrency} of {Tx}";
+        return $"{Tx} (–{Amount} {Tx.SellCurrency})";
     }
 }

@@ -39,6 +39,7 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
 
         var table = new Table();
         table.Border(TableBorder.Rounded);
+        table.AddColumn("Index");
         table.AddColumn("Asset", column => { column.Footer("Total: " + totalCount); });
         table.AddColumn("Opened Date");
         table.AddColumn("Closing Date");
@@ -57,6 +58,7 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
                 PositionType.Investment => position.Currency,
                 PositionType.Arbitrage => $"{position.Currency} [ARB]",
                 PositionType.Perpetuals => $"{position.Currency} [PERP]",
+                PositionType.Loan => $"{position.Currency} [LOAN]",
                 _ => throw new ArgumentOutOfRangeException()
             };
 
@@ -76,10 +78,12 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
             x.Annotation
         });
 
+        var i = 0;
         foreach (var position in outputPositions)
         {
             var style = !position.Sold ? Style.Parse("blue") : Style.Plain;
             table.AddRow(
+                new Markup($"{++i}", style),
                 new Markup(Markup.Escape(position.Currency), style), // Asset
                 new Markup($"{position.Date:d}", style), // Opened Date
                 new Markup($"{position.ClosingDate:d}"), // Closing date
@@ -101,16 +105,29 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
             var selectionPrompt = new SelectionPrompt<string>()
                 .Title("What's would you like to do?")
                 .AddChoices(
-                    "add annotation",
-                    "print unmatched spends",
-                    "export to CSV",
-                    "exit");
+                    "Examine position",
+                    "Add annotation",
+                    "Print unmatched spends",
+                    "Export to CSV",
+                    "Back to main menu");
             var action = AnsiConsole.Prompt(selectionPrompt);
-            if (action == "exit") break;
+            if (action == "Back to main menu") break;
 
             switch (action)
             {
-                case "add annotation":
+                case "Examine position":
+                {
+                    var index = AnsiConsole.Ask<uint>("Enter position index:");
+                    var position = allPositions.ElementAt((int) index -1);
+                    var buys = position.BuyTransactions.Select(x => (x.Date, x.ToString()));
+                    var sells = position.TxSpends.Select(x => (x.Tx.Date, x.ToString()));
+                    foreach (var (date, str) in buys.Concat(sells).OrderBy(x => x.Date))
+                    {
+                        AnsiConsole.WriteLine(str);
+                    }
+                    break;
+                }
+                case "Add annotation":
                 {
                     var date = AnsiConsole.Ask<DateTime>("Enter position date");
                     var positionType = AnsiConsole.Prompt(new SelectionPrompt<PositionType>()
@@ -131,12 +148,12 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
                     });
                     break;
                 }
-                case "print unmatched spends":
+                case "Print unmatched spends":
                 {
                     PrintUnmatchedSpends(unmatchedSpends);
                     break;
                 }
-                case "export to CSV":
+                case "Export to CSV":
                 {
                     WritePositionsToCsv(outputPositions, "positions.csv");
                     break;
