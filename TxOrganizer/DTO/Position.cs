@@ -4,7 +4,8 @@ public enum PositionType
 {
     Investment,
     Arbitrage,
-    Perpetuals
+    Perpetuals,
+    Loan
 }
 
 public class Position: TaxLot
@@ -43,7 +44,7 @@ public class Position: TaxLot
         if (!SupportedBuyTxTypes.Contains(tx.Type)) throw new ArgumentException($"Unsupported tx type: {tx.Type}");
         if (Sold && !CanBeReopened) throw new ApplicationException("Can't buy into already sold position");
         if (tx.BuyCurrency != Currency) throw new ArgumentException("Buy transaction has an invalid currency");
-        if (tx.Date < Date) throw new ArgumentException("Buy transaction predates position creation date: " + tx);
+        if (PositionType == PositionType.Investment && tx.Date < Date) throw new ArgumentException($"Buy transaction predates position creation date: {tx} vs {BuyTransaction}");
         
         _buyTransactions.Add(tx);
     }

@@ -11,10 +11,10 @@ public class PositionProcessor
     private readonly SettingsRepository _settingsRepository;
     private static readonly Regex NftCurrencyRegex = new Regex(@"^(.+)-\d", RegexOptions.Compiled);
 
-    private readonly TxType[] _buyTxTypes = { TxType.Trade, TxType.Migration, TxType.Airdrop, TxType.Income };
+    private readonly TxType[] _buyTxTypes = { TxType.Trade, TxType.Migration, TxType.Airdrop, TxType.Income, TxType.Borrow };
 
     private readonly TxType[] _sellTxTypes =
-        { TxType.Trade, TxType.Migration, TxType.Spend, TxType.Lost, TxType.Gift, TxType.Stolen };
+        { TxType.Trade, TxType.Migration, TxType.Spend, TxType.Lost, TxType.Gift, TxType.Stolen, TxType.Repay };
 
     public PositionProcessor(CoinGeckoPriceFetcher coinGeckoPriceFetcher, SettingsRepository settingsRepository)
     {
@@ -86,7 +86,8 @@ public class PositionProcessor
 
                 if (currentPosition is null)
                 {
-                    currentPosition = new Position(tx, PositionType.Investment);
+                    var positionType = tx.Type is TxType.Borrow ? PositionType.Loan : PositionType.Investment;
+                    currentPosition = new Position(tx, positionType);
                     positions.Add(currentPosition);
                 }
                 else
@@ -232,7 +233,7 @@ public class PositionProcessor
 
     public (Position? arbPosition, double deficit) ExtractArbitragePosition(Position position)
     {
-        var sellTransactions = position.TxSpends.Select(x => x.Tx).ToList();
+        var sellTransactions = position.TxSpends.Select(x => x.Tx).OrderBy(x => x.Date).ToList();
         var lostTransactions = sellTransactions.Where(x => x.Type == TxType.Lost).ToList();
 
         // Merge Lost and Trade transactions
