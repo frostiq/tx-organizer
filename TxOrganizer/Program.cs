@@ -11,6 +11,7 @@ using TxOrganizer.DataSource;
 using TxOrganizer.DTO;
 using TxOrganizer.Processors;
 
+const string fetchTokenTaxLineItems = "Fetch TokenTax line items";
 const string traceBalances = "Trace balances";
 const string traceTaxLots = "Trace tax lots";
 const string positionHistory = "Position history";
@@ -34,13 +35,14 @@ try
     var settingsRepository = new SettingsRepository(dbContext);
     var coinGeckoPriceFetcher = new CoinGeckoPriceFetcher(dbContext);
     var csvSource = new TxSource(settingsRepository);
-
+    await DataProcessor.DownloadTokenTaxLineItems();
     string? action = null;
     while (action != exit)
     {
         var selectionPrompt = new SelectionPrompt<string>()
             .Title("What's would you like to do?")
             .AddChoices(
+                fetchTokenTaxLineItems,
                 traceBalances,
                 traceTaxLots,
                 positionHistory,
@@ -128,45 +130,12 @@ try
             }
             case fetchBinanceTxHistory:
             {
-                var fetcher = new BinanceTxHistoryFetcher();
-
-                var lines = new List<string>();
-                while (true)
-                {
-                    var line = AnsiConsole.Prompt(new TextPrompt<string>("Enter your headers (or 'END' to finish):"));
-                    if (line.ToUpper() == "END")
-                    {
-                        break;
-                    }
-
-                    lines.Add(line);
-                }
-
-                var rawHeaders = string.Join("\n", lines);
-                var matches = new Regex("-H '([^:;]+)[:;] ([^']+)").Matches(rawHeaders);
-                var headers = matches.ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
-
-                var type = AnsiConsole.Prompt(new SelectionPrompt<string>().AddChoices(
-                    "Deposits", "Withdrawals"
-                ));
-
-                switch (type)
-                {
-                    case "Deposits":
-                    {
-                        var transactions = await fetcher.FetchDepositHistory(headers);
-                        fetcher.WriteTransactionHistoryToCsv("binance-deposits.csv", transactions);
-
-                        break;
-                    }
-                    case "Withdrawals":
-                    {
-                        var transactions = await fetcher.FetchWithdrawalHistory(headers);
-                        fetcher.WriteTransactionHistoryToCsv("binance-withdrawals.csv", transactions);
-                        break;
-                    }
-                }
-
+                await DataProcessor.DownloadBinanceData();
+                break;
+            }
+            case fetchTokenTaxLineItems:
+            {
+                await DataProcessor.DownloadTokenTaxLineItems();
                 break;
             }
             case analyzeUnmatchedDepositWithdrawals:

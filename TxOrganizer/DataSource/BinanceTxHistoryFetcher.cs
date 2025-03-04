@@ -95,14 +95,7 @@ namespace TxOrganizer.DataSource
 
             return transactions;
         }
-        
-        public void WriteTransactionHistoryToCsv<T>(string filePath, IEnumerable<T> transactions)
-        {
-            using var writer = new StreamWriter(filePath);
-            using var csv = new CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture);
-            csv.WriteRecords(transactions);
-        }
-        
+
         private class ResponseModel<T>
         {
             public string Code { get; set; }
