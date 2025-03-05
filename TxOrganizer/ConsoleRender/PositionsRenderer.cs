@@ -5,7 +5,7 @@ using TxOrganizer.DTO;
 
 namespace TxOrganizer.ConsoleRender;
 
-public class PositionsRenderer: UnmatchedSpendsRenderer
+public class PositionsRenderer : UnmatchedSpendsRenderer
 {
     private readonly SettingsRepository _settingsRepository;
 
@@ -17,9 +17,9 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
     public void PrintPositions(IEnumerable<Position> allPositions, IEnumerable<TxSpend> unmatchedSpends)
     {
         AnsiConsole.Clear();
-        
+
         var onlyCurrentPositions = AnsiConsole.Confirm("Only current positions?", false);
-        
+
         if (onlyCurrentPositions)
         {
             allPositions = allPositions.Where(x => x.Sold == false);
@@ -30,7 +30,7 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
         {
             allPositions = allPositions.Where(x => x.Currency.Contains(assetFilter));
         }
-        
+
         var valueThreshold = AnsiConsole.Ask<double>("Value threshold, USD", 1000);
         allPositions = allPositions.Where(x => x.CostBasis > valueThreshold || x.Proceeds > valueThreshold)
             .OrderBy(x => x.Date);
@@ -74,7 +74,9 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
             LastPrice = x.Sold ? x.AverageExitPrice : x.CurrentPrice,
             x.CostBasis,
             GainLoss = x.Sold || x.CurrentPrice.HasValue ? x.Proceeds - x.CostBasis + x.CurrentValue : (double?)null,
-            ROI = x.Sold || x.CurrentPrice.HasValue ? (x.Proceeds - x.CostBasis + x.CurrentValue) / x.CostBasis : (double?)null,
+            ROI = x.Sold || x.CurrentPrice.HasValue
+                ? (x.Proceeds - x.CostBasis + x.CurrentValue) / x.CostBasis
+                : (double?)null,
             x.Annotation
         });
 
@@ -82,6 +84,9 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
         foreach (var position in outputPositions)
         {
             var style = !position.Sold ? Style.Parse("blue") : Style.Plain;
+            var price = position.LastPrice.HasValue
+                ? position.LastPrice >= 0.01 ? $"{position.LastPrice:C}" : $"{position.LastPrice:R}"
+                : "???";
             table.AddRow(
                 new Markup($"{++i}", style),
                 new Markup(Markup.Escape(position.Currency), style), // Asset
@@ -90,7 +95,7 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
                 new Markup(Markup.Escape(position.TotalAmount), style), // Total Qty
                 new Markup(Markup.Escape(position.RemainingAmount), style), // Remaining Qty
                 new Markup($"{position.AvgPrice:C}", style), // Avg Price
-                new Markup(position.LastPrice.HasValue ? $"{position.LastPrice:C}" : "???", style), // Market / Close Price
+                new Markup(price, style), // Market / Close Price
                 new Markup($"{position.CostBasis:C}", style), // Cost
                 new Markup(position.GainLoss.HasValue ? $"{position.GainLoss:C}" : "???", style), // Gain/Loss
                 new Markup(position.ROI.HasValue ? $"{position.ROI:P}" : "???", style), // ROI%
@@ -118,13 +123,14 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
                 case "Examine position":
                 {
                     var index = AnsiConsole.Ask<uint>("Enter position index:");
-                    var position = allPositions.ElementAt((int) index -1);
+                    var position = allPositions.ElementAt((int)index - 1);
                     var buys = position.BuyTransactions.Select(x => (x.Date, x.ToString()));
                     var sells = position.TxSpends.Select(x => (x.Tx.Date, x.ToString()));
                     foreach (var (date, str) in buys.Concat(sells).OrderBy(x => x.Date))
                     {
                         AnsiConsole.WriteLine(str);
                     }
+
                     break;
                 }
                 case "Add annotation":
@@ -139,7 +145,7 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
                     var annotation = AnsiConsole.Ask<string>("Enter annotation");
                     var link = AnsiConsole.Prompt(new TextPrompt<string>("Add link?").AllowEmpty());
                     var value = link == string.Empty ? annotation : $"[link={link}]{annotation}[/]";
-                    
+
                     _settingsRepository.AddSetting(new Setting
                     {
                         Type = SettingType.PositionAnnotation,
@@ -168,5 +174,4 @@ public class PositionsRenderer: UnmatchedSpendsRenderer
         using var csv = new CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture);
         csv.WriteRecords(positions);
     }
-
 }
