@@ -41,7 +41,7 @@ public class DataProcessor
     {
         var fetcher = new TokenTaxLineItemsFetcher();
         var headers = ReadRequestHeaders();
-        var lineItems = fetcher.FetchTokenTaxLineItems(7762773, headers);
+        var lineItems = await fetcher.FetchTokenTaxLineItems(7762773, headers);
         
         var options = new JsonSerializerOptions
         {
@@ -53,11 +53,11 @@ public class DataProcessor
         await File.WriteAllTextAsync("lineItems.json", json);
     }
     
-    private static void WriteTransactionHistoryToCsv<T>(string filePath, IEnumerable<T> transactions)
+    public static void WriteTransactionHistoryToCsv<T>(string filePath, IEnumerable<T> entities)
     {
         using var writer = new StreamWriter(filePath);
         using var csv = new CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture);
-        csv.WriteRecords(transactions);
+        csv.WriteRecords(entities);
     }
 
     private static Dictionary<string, string> ReadRequestHeaders()

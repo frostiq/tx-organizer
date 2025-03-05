@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -35,7 +36,7 @@ try
     var settingsRepository = new SettingsRepository(dbContext);
     var coinGeckoPriceFetcher = new CoinGeckoPriceFetcher(dbContext);
     var csvSource = new TxSource(settingsRepository);
-    await DataProcessor.DownloadTokenTaxLineItems();
+    
     string? action = null;
     while (action != exit)
     {
@@ -136,6 +137,9 @@ try
             case fetchTokenTaxLineItems:
             {
                 await DataProcessor.DownloadTokenTaxLineItems();
+                // var json = File.ReadAllText("lineItems.json");
+                // var entities = JsonSerializer.Deserialize<IEnumerable<TokenTaxLineItemsFetcher.LineItem>>(json);
+                // DataProcessor.WriteTransactionHistoryToCsv("lineItems.csv", entities);
                 break;
             }
             case analyzeUnmatchedDepositWithdrawals:
