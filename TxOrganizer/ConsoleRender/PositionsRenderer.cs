@@ -83,10 +83,13 @@ public class PositionsRenderer : UnmatchedSpendsRenderer
         var i = 0;
         foreach (var position in outputPositions)
         {
+            string FormatPrice(double? price) =>
+                price.HasValue
+                    ? price >= 0.01 ? $"{price:C}" : $"${price:R}"
+                    : "???";
+
             var style = !position.Sold ? Style.Parse("blue") : Style.Plain;
-            var price = position.LastPrice.HasValue
-                ? position.LastPrice >= 0.01 ? $"{position.LastPrice:C}" : $"{position.LastPrice:R}"
-                : "???";
+
             table.AddRow(
                 new Markup($"{++i}", style),
                 new Markup(Markup.Escape(position.Currency), style), // Asset
@@ -94,8 +97,8 @@ public class PositionsRenderer : UnmatchedSpendsRenderer
                 new Markup($"{position.ClosingDate:d}"), // Closing date
                 new Markup(Markup.Escape(position.TotalAmount), style), // Total Qty
                 new Markup(Markup.Escape(position.RemainingAmount), style), // Remaining Qty
-                new Markup($"{position.AvgPrice:C}", style), // Avg Price
-                new Markup(price, style), // Market / Close Price
+                new Markup(FormatPrice(position.AvgPrice), style), // Avg Price
+                new Markup(FormatPrice(position.LastPrice), style), // Market / Close Price
                 new Markup($"{position.CostBasis:C}", style), // Cost
                 new Markup(position.GainLoss.HasValue ? $"{position.GainLoss:C}" : "???", style), // Gain/Loss
                 new Markup(position.ROI.HasValue ? $"{position.ROI:P}" : "???", style), // ROI%
