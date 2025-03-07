@@ -137,9 +137,6 @@ try
             case fetchTokenTaxLineItems:
             {
                 await DataProcessor.DownloadTokenTaxLineItems();
-                // var json = File.ReadAllText("lineItems.json");
-                // var entities = JsonSerializer.Deserialize<IEnumerable<TokenTaxLineItemsFetcher.LineItem>>(json);
-                // DataProcessor.WriteTransactionHistoryToCsv("lineItems.csv", entities);
                 break;
             }
             case analyzeUnmatchedDepositWithdrawals:
