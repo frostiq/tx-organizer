@@ -292,3 +292,5 @@ __pycache__/
 # SQlite database files
 *.sqlite
 *.db*
+
+.DS_Store

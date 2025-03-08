@@ -136,7 +136,8 @@ try
             }
             case fetchTokenTaxLineItems:
             {
-                await DataProcessor.DownloadTokenTaxLineItems();
+                var reportId = AnsiConsole.Ask<uint>("Please enter TokenTax report ID:");
+                await DataProcessor.DownloadTokenTaxLineItems(reportId);
                 break;
             }
             case analyzeUnmatchedDepositWithdrawals:

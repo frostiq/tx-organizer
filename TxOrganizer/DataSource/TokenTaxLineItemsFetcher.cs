@@ -13,7 +13,7 @@ public class TokenTaxLineItemsFetcher
         PropertyNameCaseInsensitive = true,
     };
 
-    public async Task<List<LineItem>> FetchTokenTaxLineItems(int? txnReportId, Dictionary<string, string> headers)
+    public async Task<List<LineItem>> FetchTokenTaxLineItems(uint txnReportId, Dictionary<string, string> headers)
     {
         const string url = "https://api.app.tokentax.co/graph/graphql?opname=lineItems";
 

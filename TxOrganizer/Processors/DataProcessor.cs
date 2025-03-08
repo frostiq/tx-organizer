@@ -37,11 +37,11 @@ public class DataProcessor
         }
     }
 
-    public static async Task DownloadTokenTaxLineItems()
+    public static async Task DownloadTokenTaxLineItems(uint reportId)
     {
         var fetcher = new TokenTaxLineItemsFetcher();
         var headers = ReadRequestHeaders();
-        var lineItems = await fetcher.FetchTokenTaxLineItems(7762773, headers);
+        var lineItems = await fetcher.FetchTokenTaxLineItems(reportId, headers);
 
         var options = new JsonSerializerOptions
         {
