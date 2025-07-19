@@ -76,9 +76,9 @@ public class LocalBalance
             Balance += balanceDiff;
         }
 
-        if (tx.FeeCurrency == Currency && IncludeFees(tx))
+        if (tx.FeeCurrency == Currency)
         {
-            Balance -= tx.Fee;
+            if (IncludeFees(tx)) Balance -= tx.Fee;
             Fees += tx.Fee;
         }
 
@@ -93,6 +93,7 @@ public class LocalBalance
         {
             { Location: "Poloniex" } => tx.Type != TxType.Withdrawal,
             { Location: "Kraken"} => false,
+            { Location: "kraken"} => false,
             { Location: "Gemini"} => false,
             { Location: "cex.io", FeeCurrency: "BTC"} => false,
             { Location: "Jaxx"} => false,
@@ -100,6 +101,7 @@ public class LocalBalance
             { Location: "Ledger" } => false,
             { Location: "Trezor" } => false,
             { Location: "coinbase"} => false,
+            // { Location: "localbitcoins"} => false,
             _ => true
         };
     }

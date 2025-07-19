@@ -1,6 +1,4 @@
-﻿using System.Text.Json;
-using System.Text.RegularExpressions;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +19,7 @@ const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
 const string analyzeUnmatchedDepositWithdrawals = "Analyze deposit/withdrawal missmatch";
 const string findDuplicateTransactions = "Find duplicate transactions";
 const string addSetting = "Add setting";
+const string detectTransactionDifferences = "Detect transaction differences"; 
 const string exit = "Exit";
 
 try
@@ -45,13 +44,14 @@ try
             .Title("What's would you like to do?")
             .AddChoices(
                 findDuplicateTransactions,
-                fetchTokenTaxLineItems,
+                // fetchTokenTaxLineItems,
                 traceBalances,
                 traceTaxLots,
                 positionHistory,
                 importTransactions,
                 analyzeUnmatchedDepositWithdrawals,
                 fetchBinanceTxHistory,
+                detectTransactionDifferences,
                 addSetting,
                 exit);
         action = AnsiConsole.Prompt(selectionPrompt);
@@ -63,8 +63,8 @@ try
             {
                 var transactions = await ReadAllTransactions(repository);
 
-                var startDate =
-                    AnsiConsole.Prompt(new TextPrompt<DateTime?>(Markup.Escape("Enter start date or [space]"))
+                var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("[[Optional]] Enter start date")
+                        .DefaultValue(null)
                         .AllowEmpty());
                 var balancesRenderer = new BalancesRenderer(startDate);
                 var balanceProcessor = new BalanceTxProcessor();
@@ -77,8 +77,8 @@ try
             {
                 var transactions = await ReadAllTransactions(repository);
 
-                var startDate =
-                    AnsiConsole.Prompt(new TextPrompt<DateTime?>(Markup.Escape("Enter start date or [space]"))
+                var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("[[Optional]] Enter start date")
+                        .DefaultValue(null)
                         .AllowEmpty());
                 var taxLotsRenderer = new TaxLotsRenderer(startDate);
                 var taxLotsProcessor = new TaxLotProcessor();
@@ -162,6 +162,45 @@ try
             {
                 var transactions = csvSource.LoadTransactions().ToList();
                 FindAndHighlightDuplicates(transactions);
+                break;
+            }
+            case detectTransactionDifferences:
+            {
+                var csvTransactions = csvSource.LoadTransactions();
+                var dbTransactions = await ReadAllTransactions(repository);
+                var groupedDiffs = FindGroupedTransactionDifferences(csvTransactions, dbTransactions);
+
+                if (!groupedDiffs.Any())
+                {
+                    AnsiConsole.MarkupLine("[green]No differences found between CSV and database transactions![/]");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[yellow]Found {groupedDiffs.Count} differences (grouped by date):[/]");
+                    var groupedByDate = groupedDiffs.GroupBy(x => x.Date).OrderBy(g => g.Key);
+                    var root = new Tree("[bold]Differences by Date[/]");
+                    foreach (var group in groupedByDate)
+                    {
+                        var dateNode = root.AddNode($"{group.Key:yyyy-MM-dd} ({group.Count()} differences)");
+                        foreach (var (csv, db, _) in group)
+                        {
+                            var entryNode = dateNode.AddNode("");
+                            if (csv != null) {
+                                var csvDisplay = Markup.Escape(csv.ToString());
+                                if (!string.IsNullOrEmpty(csv.Comment))
+                                    csvDisplay += $" - Comment: {Markup.Escape(csv.Comment)}";
+                                entryNode.AddNode($"[green]CSV:[/] {csvDisplay}");
+                            }
+                            if (db != null) {
+                                var dbDisplay = Markup.Escape(db.ToString());
+                                if (!string.IsNullOrEmpty(db.Comment))
+                                    dbDisplay += $" - Comment: {Markup.Escape(db.Comment)}";
+                                entryNode.AddNode($"[red]DB :[/] {dbDisplay}");
+                            }
+                        }
+                    }
+                    AnsiConsole.Write(root);
+                }
                 break;
             }
             case addSetting:
@@ -281,4 +320,30 @@ void FindAndHighlightDuplicates(List<Transaction> transactions)
 
     AnsiConsole.Write(table);
     AnsiConsole.MarkupLine($"[yellow]Total duplicate transactions: {duplicateGroups.Sum(g => g.Count())}[/]");
+}
+
+// Helper to find all differences and group by date, returning all diffs per date (CSV and DB side by side)
+List<(Transaction? Csv, Transaction? Db, DateTime Date)> FindGroupedTransactionDifferences(IEnumerable<Transaction> csvTransactions, IEnumerable<Transaction> dbTransactions)
+{
+    string Key(Transaction t) => $"{t.Type}:{t.Date:yyyy-MM-dd}|{t.BuyCurrency}|{Math.Round(t.BuyAmount,2)}|{t.SellCurrency}|{Math.Round(t.SellAmount,2)}:{t.Comment}";
+    var csvByDate = csvTransactions.GroupBy(t => t.Date.Date).ToDictionary(g => g.Key, g => g.ToList());
+    var dbByDate = dbTransactions.GroupBy(t => t.Date.Date).ToDictionary(g => g.Key, g => g.ToList());
+    var allDates = csvByDate.Keys.Union(dbByDate.Keys).OrderBy(d => d);
+    var result = new List<(Transaction?, Transaction?, DateTime)>();
+    var cutoff = new DateTime(2025, 1, 1);
+    foreach (var date in allDates)
+    {
+        if (date >= cutoff) continue;
+        var csvList = csvByDate.ContainsKey(date) ? csvByDate[date] : new List<Transaction>();
+        var dbList = dbByDate.ContainsKey(date) ? dbByDate[date] : new List<Transaction>();
+        var csvKeys = new HashSet<string>(csvList.Select(Key));
+        var dbKeys = new HashSet<string>(dbList.Select(Key));
+        // All CSV transactions not in DB for this date
+        foreach (var t in csvList.Where(t => !dbKeys.Contains(Key(t))))
+            result.Add((t, null, date));
+        // All DB transactions not in CSV for this date
+        foreach (var t in dbList.Where(t => !csvKeys.Contains(Key(t))))
+            result.Add((null, t, date));
+    }
+    return result;
 }

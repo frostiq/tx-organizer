@@ -49,9 +49,9 @@ public class Transaction
     {
         return Type switch
         {
-            TxType.Deposit => $"{Date}: {Type} {BuyAmount} {BuyCurrency}",
-            TxType.Withdrawal => $"{Date}: {Type} {SellAmount} {SellCurrency}",
-            TxType.Spend => $"{Date}: {Type} {Fee} {FeeCurrency}",
+            TxType.Deposit => $"{Date}: {Type} {BuyAmount} {BuyCurrency} on {Location}",
+            TxType.Withdrawal => $"{Date}: {Type} {SellAmount} {SellCurrency} from {Location}",
+            TxType.Spend => $"{Date}: {Type} {(Fee > SellAmount ? Fee : SellAmount)} {(Fee > SellAmount ? FeeCurrency : SellCurrency)} from {Location}",
             _ => $"{Date}: {Type} {SellAmount} {SellCurrency} => {BuyAmount} {BuyCurrency} on {Location}"
         };
     }
