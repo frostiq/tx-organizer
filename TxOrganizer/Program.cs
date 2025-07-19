@@ -1,14 +1,18 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using TxOrganizer;
+using TxOrganizer.Analysis;
+using TxOrganizer.Configuration;
 using TxOrganizer.ConsoleRender;
 using TxOrganizer.Database;
 using TxOrganizer.DataSource;
 using TxOrganizer.DTO;
 using TxOrganizer.Processors;
+using TxOrganizer.Utilities;
 
 const string fetchTokenTaxLineItems = "Fetch TokenTax line items";
 const string traceBalances = "Trace balances";
@@ -19,11 +23,23 @@ const string fetchBinanceTxHistory = "Fetch Binance Transaction History";
 const string analyzeUnmatchedDepositWithdrawals = "Analyze deposit/withdrawal missmatch";
 const string findDuplicateTransactions = "Find duplicate transactions";
 const string addSetting = "Add setting";
-const string detectTransactionDifferences = "Detect transaction differences"; 
+const string detectTransactionDifferences = "Detect transaction differences";
+const string processEthHistoricalBalances = "Process ETH Historical Balances";
 const string exit = "Exit";
 
 try
 {
+    // Build configuration
+    var configuration = new ConfigurationBuilder()
+        .SetBasePath(Directory.GetCurrentDirectory())
+        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+        .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", optional: true)
+        .Build();
+
+    // Bind API keys configuration
+    var apiKeysConfig = new ApiKeysConfiguration();
+    configuration.GetSection(ApiKeysConfiguration.SectionName).Bind(apiKeysConfig);
+
     var dbContextFactory = new AppDbContextFactory();
     await using var dbContext = dbContextFactory.CreateDbContext(Array.Empty<string>());
 
@@ -52,6 +68,7 @@ try
                 analyzeUnmatchedDepositWithdrawals,
                 fetchBinanceTxHistory,
                 detectTransactionDifferences,
+                processEthHistoricalBalances,
                 addSetting,
                 exit);
         action = AnsiConsole.Prompt(selectionPrompt);
@@ -61,7 +78,7 @@ try
         {
             case traceBalances:
             {
-                var transactions = await ReadAllTransactions(repository);
+                var transactions = await TransactionLoader.ReadAllTransactionsAsync(repository);
 
                 var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("[[Optional]] Enter start date")
                         .DefaultValue(null)
@@ -75,7 +92,7 @@ try
             }
             case traceTaxLots:
             {
-                var transactions = await ReadAllTransactions(repository);
+                var transactions = await TransactionLoader.ReadAllTransactionsAsync(repository);
 
                 var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("[[Optional]] Enter start date")
                         .DefaultValue(null)
@@ -105,7 +122,7 @@ try
             }
             case positionHistory:
             {
-                var transactions = await ReadAllTransactions(repository);
+                var transactions = await TransactionLoader.ReadAllTransactionsAsync(repository);
                 var positionsRenderer = new PositionsRenderer(settingsRepository);
                 var positionProcessor = new PositionProcessor(coinGeckoPriceFetcher, settingsRepository);
                 
@@ -150,7 +167,7 @@ try
 
                 var processor = new DepositWithdrawalMatchProcessor();
                 var renderer = new UnmatchedDepoistWithdrawalsRenderer();
-                var transactions = await ReadAllTransactions(repository);
+                var transactions = await TransactionLoader.ReadAllTransactionsAsync(repository);
 
                 var (unmatchedDeposits, unmatchedWithdrawals) =
                     await processor.AnalyzeDepositWithdrawals(transactions, targetCurrency);
@@ -161,45 +178,73 @@ try
             case findDuplicateTransactions:
             {
                 var transactions = csvSource.LoadTransactions().ToList();
-                FindAndHighlightDuplicates(transactions);
+                DuplicateTransactionAnalyzer.FindAndHighlightDuplicates(transactions);
                 break;
             }
             case detectTransactionDifferences:
             {
                 var csvTransactions = csvSource.LoadTransactions();
-                var dbTransactions = await ReadAllTransactions(repository);
-                var groupedDiffs = FindGroupedTransactionDifferences(csvTransactions, dbTransactions);
+                var dbTransactions = await TransactionLoader.ReadAllTransactionsAsync(repository);
+                var groupedDiffs = TransactionDifferenceAnalyzer.FindGroupedTransactionDifferences(csvTransactions, dbTransactions);
 
-                if (!groupedDiffs.Any())
+                TransactionDifferenceAnalyzer.DisplayTransactionDifferences(groupedDiffs);
+                break;
+            }
+            case processEthHistoricalBalances:
+            {
+                // Check if API key is configured
+                if (string.IsNullOrWhiteSpace(apiKeysConfig.Etherscan))
                 {
-                    AnsiConsole.MarkupLine("[green]No differences found between CSV and database transactions![/]");
+                    AnsiConsole.MarkupLine("[red]Error: Etherscan API key not configured in appsettings.json[/]");
+                    AnsiConsole.MarkupLine("[yellow]Please set your Etherscan API key in appsettings.json under ApiKeys:Etherscan[/]");
+                    break;
                 }
-                else
-                {
-                    AnsiConsole.MarkupLine($"[yellow]Found {groupedDiffs.Count} differences (grouped by date):[/]");
-                    var groupedByDate = groupedDiffs.GroupBy(x => x.Date).OrderBy(g => g.Key);
-                    var root = new Tree("[bold]Differences by Date[/]");
-                    foreach (var group in groupedByDate)
+
+                var address = AnsiConsole.Prompt(new TextPrompt<string>("Enter Ethereum address:")
+                    .Validate(addr => 
                     {
-                        var dateNode = root.AddNode($"{group.Key:yyyy-MM-dd} ({group.Count()} differences)");
-                        foreach (var (csv, db, _) in group)
+                        if (string.IsNullOrWhiteSpace(addr))
+                            return ValidationResult.Error("Address cannot be empty");
+                        if (addr.Length != 42 || !addr.StartsWith("0x"))
+                            return ValidationResult.Error("Invalid Ethereum address format (must be 42 chars starting with 0x)");
+                        return ValidationResult.Success();
+                    }));
+
+                var startBlock = AnsiConsole.Prompt(new TextPrompt<long>("Enter start block number:")
+                    .DefaultValue(0L)
+                    .Validate(block => block >= 0 ? ValidationResult.Success() : ValidationResult.Error("Block number must be >= 0")));
+
+                var endBlock = AnsiConsole.Prompt(new TextPrompt<long?>("Enter end block number (optional):")
+                    .DefaultValue(null)
+                    .AllowEmpty()
+                    .Validate(block => 
+                    {
+                        if (!block.HasValue) return ValidationResult.Success();
+                        return block.Value >= startBlock ? ValidationResult.Success() : ValidationResult.Error("End block must be >= start block");
+                    }));
+
+                try
+                {
+                    var httpClient = new HttpClient();
+                    var etherscanApi = new EtherscanApiService(httpClient, apiKeysConfig.Etherscan);
+                    var ethProcessor = new EthHistoricalBalanceProcessor(dbContext, etherscanApi);
+
+                    await AnsiConsole.Progress()
+                        .StartAsync(async ctx =>
                         {
-                            var entryNode = dateNode.AddNode("");
-                            if (csv != null) {
-                                var csvDisplay = Markup.Escape(csv.ToString());
-                                if (!string.IsNullOrEmpty(csv.Comment))
-                                    csvDisplay += $" - Comment: {Markup.Escape(csv.Comment)}";
-                                entryNode.AddNode($"[green]CSV:[/] {csvDisplay}");
-                            }
-                            if (db != null) {
-                                var dbDisplay = Markup.Escape(db.ToString());
-                                if (!string.IsNullOrEmpty(db.Comment))
-                                    dbDisplay += $" - Comment: {Markup.Escape(db.Comment)}";
-                                entryNode.AddNode($"[red]DB :[/] {dbDisplay}");
-                            }
-                        }
-                    }
-                    AnsiConsole.Write(root);
+                            var task = ctx.AddTask($"Processing ETH balances for {address}", maxValue: 100);
+                            task.IsIndeterminate = true;
+                            
+                            await ethProcessor.ProcessHistoricalBalancesAsync(address, startBlock, endBlock);
+                            
+                            task.Value = task.MaxValue;
+                        });
+
+                    AnsiConsole.MarkupLine($"[green]Successfully processed historical balances for address {address}[/]");
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLine($"[red]Error processing historical balances: {ex.Message}[/]");
                 }
                 break;
             }
@@ -225,125 +270,4 @@ try
 catch (Exception e)
 {
     AnsiConsole.WriteException(e);
-}
-
-// Read transactions function
-async Task<List<Transaction>> ReadAllTransactions(FinancialDatabaseRepository repository)
-{
-    return await AnsiConsole.Status()
-        .StartAsync("Loading transactions from database...", _ => repository.ReadAllTransactions());
-}
-
-// Helper function to count decimal places
-int GetDecimalPlaces(double value)
-{
-    var str = value.ToString("G5");
-    if (!str.Contains('.')) return 0;
-    
-    // Remove trailing zeros
-    str = str.TrimEnd('0');
-    if (str.EndsWith('.')) return 0;
-    
-    return str.Length - str.IndexOf('.') - 1;
-}
-
-// Find and highlight duplicates
-void FindAndHighlightDuplicates(List<Transaction> transactions)
-{
-    // Group transactions by date, buy currency, and sell currency
-    var duplicateGroups = transactions
-        .Where(x => !(x.BuyCurrency.Contains("USDT") && x.SellCurrency.Contains("USDT"))
-                    && !string.IsNullOrWhiteSpace(x.BuyCurrency)
-                    && !string.IsNullOrWhiteSpace(x.SellCurrency)
-                    && x.BuyAmount > 0
-                    && x.SellAmount > 0)
-        .GroupBy(t => 
-        {
-            var buyDecimals = GetDecimalPlaces(t.BuyAmount);
-            var sellDecimals = GetDecimalPlaces(t.SellAmount);
-            var minDecimals = Math.Min(buyDecimals, sellDecimals) - 1;
-            if (minDecimals < 0) minDecimals = 0;
-            if (minDecimals > 15) minDecimals = 15;
-            
-            return new
-            {
-                Date = t.Date.ToString("MM/dd/yyyy"),
-                BuyCurrency = t.BuyCurrency?.ToUpperInvariant(),
-                SellCurrency = t.SellCurrency?.ToUpperInvariant(),
-                BuyAmount = Math.Round(t.BuyAmount, minDecimals),
-                SellAmount = Math.Round(t.SellAmount, minDecimals),
-            };
-        });
-    
-    var test = duplicateGroups.Where(x => x.Key.Date.Contains("03/12/2024")).ToList();
-    duplicateGroups = duplicateGroups.Where(g => g.Select(x => x.Location).Distinct().Count() > 1)
-        .OrderBy(g => g.First().Date)
-        .ToList();
-
-    if (!duplicateGroups.Any())
-    {
-        AnsiConsole.MarkupLine("[green]No duplicates found![/]");
-        return;
-    }
-
-    AnsiConsole.MarkupLine($"[yellow]Found {duplicateGroups.Count()} groups of duplicate transactions:[/]");
-    AnsiConsole.WriteLine();
-
-    var table = new Table();
-    table.AddColumn("Date");
-    table.AddColumn("Buy Currency");
-    table.AddColumn("Buy Amount");
-    table.AddColumn("Sell Currency");
-    table.AddColumn("Sell Amount");
-    table.AddColumn("Location");
-    table.AddColumn("Type");
-
-    foreach (var group in duplicateGroups)
-    {
-        AnsiConsole.MarkupLine($"[bold]Duplicate group: {group.Key.Date:yyyy-MM-dd} - {group.Key.BuyCurrency ?? "N/A"}/{group.Key.SellCurrency ?? "N/A"}[/]");
-        
-        foreach (var transaction in group.OrderBy(t => t.Location))
-        {
-            table.AddRow(
-                transaction.Date.ToString("yyyy-MM-dd HH:mm:ss"),
-                transaction.BuyCurrency ?? "N/A",
-                transaction.BuyAmount.ToString("F8"),
-                transaction.SellCurrency ?? "N/A",
-                transaction.SellAmount.ToString("F8"),
-                $"[red]{transaction.Location ?? "N/A"}[/]",
-                transaction.Type.ToString()
-            );
-        }
-        
-        table.AddEmptyRow();
-    }
-
-    AnsiConsole.Write(table);
-    AnsiConsole.MarkupLine($"[yellow]Total duplicate transactions: {duplicateGroups.Sum(g => g.Count())}[/]");
-}
-
-// Helper to find all differences and group by date, returning all diffs per date (CSV and DB side by side)
-List<(Transaction? Csv, Transaction? Db, DateTime Date)> FindGroupedTransactionDifferences(IEnumerable<Transaction> csvTransactions, IEnumerable<Transaction> dbTransactions)
-{
-    string Key(Transaction t) => $"{t.Type}:{t.Date:yyyy-MM-dd}|{t.BuyCurrency}|{Math.Round(t.BuyAmount,2)}|{t.SellCurrency}|{Math.Round(t.SellAmount,2)}:{t.Comment}";
-    var csvByDate = csvTransactions.GroupBy(t => t.Date.Date).ToDictionary(g => g.Key, g => g.ToList());
-    var dbByDate = dbTransactions.GroupBy(t => t.Date.Date).ToDictionary(g => g.Key, g => g.ToList());
-    var allDates = csvByDate.Keys.Union(dbByDate.Keys).OrderBy(d => d);
-    var result = new List<(Transaction?, Transaction?, DateTime)>();
-    var cutoff = new DateTime(2025, 1, 1);
-    foreach (var date in allDates)
-    {
-        if (date >= cutoff) continue;
-        var csvList = csvByDate.ContainsKey(date) ? csvByDate[date] : new List<Transaction>();
-        var dbList = dbByDate.ContainsKey(date) ? dbByDate[date] : new List<Transaction>();
-        var csvKeys = new HashSet<string>(csvList.Select(Key));
-        var dbKeys = new HashSet<string>(dbList.Select(Key));
-        // All CSV transactions not in DB for this date
-        foreach (var t in csvList.Where(t => !dbKeys.Contains(Key(t))))
-            result.Add((t, null, date));
-        // All DB transactions not in CSV for this date
-        foreach (var t in dbList.Where(t => !csvKeys.Contains(Key(t))))
-            result.Add((null, t, date));
-    }
-    return result;
 }
