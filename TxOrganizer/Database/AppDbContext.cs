@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Setting> Settings => Set<Setting>();
     public DbSet<EthHistoricalBalance> EthHistoricalBalances => Set<EthHistoricalBalance>();
+    public DbSet<AddressLabel> AddressLabels => Set<AddressLabel>();
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,5 +52,23 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<EthHistoricalBalance>()
             .Property(o => o.BalanceEth)
             .HasColumnType("decimal(28,18)"); // 18 decimal places for ETH
+            
+        modelBuilder.Entity<AddressLabel>()
+            .HasKey(x => x.Address);
+        modelBuilder.Entity<AddressLabel>()
+            .Property(o => o.Address)
+            .IsRequired()
+            .HasMaxLength(42); // Ethereum address length
+        modelBuilder.Entity<AddressLabel>()
+            .Property(o => o.Label)
+            .IsRequired()
+            .HasMaxLength(200);
+        modelBuilder.Entity<AddressLabel>()
+            .Property(o => o.Category)
+            .HasMaxLength(100);
+        modelBuilder.Entity<AddressLabel>()
+            .HasIndex(x => x.Category);
+        modelBuilder.Entity<AddressLabel>()
+            .HasIndex(x => x.Label);
     }
 }

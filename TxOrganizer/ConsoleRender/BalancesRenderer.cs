@@ -30,7 +30,7 @@ public class BalancesRenderer : TransactionRenderer
     }
 
     public bool TraceBalancesAction(Transaction tx, LocalBalance.ProcessingStatus status, LocalBalance current,
-        IEnumerable<LocalBalance> balances)
+        IEnumerable<LocalBalance> balances, string? ethBalanceInfo = null)
     {
         if (!_trace || status == LocalBalance.ProcessingStatus.NotRelevant) return true;
 
@@ -56,6 +56,11 @@ public class BalancesRenderer : TransactionRenderer
         AnsiConsole.Clear();
         RenderBalances(current, balances);
         RenderTx(tx, 0, 0);
+
+        if (!string.IsNullOrEmpty(ethBalanceInfo))
+        {
+            AnsiConsole.MarkupLine($"[cyan]{ethBalanceInfo}[/]");
+        }
 
         if (status == LocalBalance.ProcessingStatus.NegativeBalance)
         {

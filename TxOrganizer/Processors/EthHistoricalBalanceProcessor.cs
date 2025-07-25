@@ -1,4 +1,3 @@
-using System.Numerics;
 using Microsoft.EntityFrameworkCore;
 using TxOrganizer.Database;
 using TxOrganizer.DataSource;
@@ -10,21 +9,11 @@ public class EthHistoricalBalanceProcessor
 {
     private readonly AppDbContext _dbContext;
     private readonly EtherscanApiService _etherscanApi;
-    private static readonly BigInteger WeiPerEth = BigInteger.Pow(10, 18);
     
     public EthHistoricalBalanceProcessor(AppDbContext dbContext, EtherscanApiService etherscanApi)
     {
         _dbContext = dbContext;
         _etherscanApi = etherscanApi;
-    }
-    
-    /// <summary>
-    /// Converts Wei (BigInteger) to ETH (decimal) without losing precision
-    /// </summary>
-    private static decimal WeiToEth(BigInteger wei)
-    {
-        var ethPart = BigInteger.DivRem(wei, WeiPerEth, out var remainder);
-        return (decimal)ethPart + (decimal)remainder / (decimal)WeiPerEth;
     }
     
     /// <summary>
@@ -68,7 +57,7 @@ public class EthHistoricalBalanceProcessor
         
         Console.WriteLine($"Found {transactions.Count} transactions. Processing balance changes...");
         
-        // Group transactions by block to calculate balance at each block
+        // Group transactions by block to get balance at each block
         var transactionsByBlock = transactions
             .Where(tx => !tx.IsError) // Skip failed transactions
             .GroupBy(tx => tx.BlockNumber)
@@ -76,67 +65,42 @@ public class EthHistoricalBalanceProcessor
             .ToList();
         
         var balanceRecords = new List<EthHistoricalBalance>();
-        var currentBalance = BigInteger.Zero;
-        
-        // Get starting balance if we're not starting from genesis
-        if (startBlock > 0)
-        {
-            try
-            {
-                var startingBalanceEth = await _etherscanApi.GetBalanceAtBlockAsync(address, startBlock - 1);
-                currentBalance = (BigInteger)(startingBalanceEth * (decimal)WeiPerEth);
-                Console.WriteLine($"Starting balance at block {startBlock - 1}: {startingBalanceEth} ETH");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Warning: Could not fetch starting balance: {ex.Message}");
-            }
-        }
         
         foreach (var blockGroup in transactionsByBlock)
         {
             var blockNumber = blockGroup.Key;
             var blockTransactions = blockGroup.OrderBy(tx => tx.TransactionIndex).ToList();
-            
-            // Calculate balance change for this block
-            var balanceChange = BigInteger.Zero;
             var lastTransaction = blockTransactions.Last();
             
-            foreach (var tx in blockTransactions)
+            try
             {
-                if (tx.To?.ToLowerInvariant() == address)
+                // Get actual balance from Etherscan API at this block
+                var balanceEth = await _etherscanApi.GetBalanceAtBlockAsync(address, blockNumber);
+                
+                // Create balance record
+                var balanceRecord = new EthHistoricalBalance
                 {
-                    // Incoming transaction
-                    balanceChange += tx.Value;
-                }
-                else if (tx.From?.ToLowerInvariant() == address)
+                    Address = address,
+                    BlockNumber = blockNumber,
+                    BlockTimestamp = lastTransaction.Timestamp,
+                    TransactionHash = lastTransaction.Hash,
+                    BalanceEth = balanceEth, // Use actual balance from API
+                    CreatedAt = DateTime.UtcNow
+                };
+                
+                balanceRecords.Add(balanceRecord);
+                
+                if (balanceRecords.Count >= batchSize)
                 {
-                    // Outgoing transaction
-                    balanceChange -= tx.Value;
+                    await SaveBalanceRecordsAsync(balanceRecords);
+                    balanceRecords.Clear();
+                    Console.WriteLine($"Processed up to block {blockNumber}, balance: {balanceEth} ETH");
                 }
             }
-            
-            currentBalance += balanceChange;
-            
-            // Create balance record
-            var balanceRecord = new EthHistoricalBalance
+            catch (Exception ex)
             {
-                Address = address,
-                BlockNumber = blockNumber,
-                BlockTimestamp = lastTransaction.Timestamp,
-                TransactionHash = lastTransaction.Hash,
-                BalanceEth = WeiToEth(currentBalance), // Convert Wei to ETH with full precision
-                CreatedAt = DateTime.UtcNow
-            };
-            
-            balanceRecords.Add(balanceRecord);
-            
-            // Save in batches to avoid memory issues
-            if (balanceRecords.Count >= batchSize)
-            {
-                await SaveBalanceRecordsAsync(balanceRecords);
-                balanceRecords.Clear();
-                Console.WriteLine($"Processed up to block {blockNumber}...");
+                Console.WriteLine($"Warning: Could not fetch balance for block {blockNumber}: {ex.Message}");
+                // Continue processing other blocks
             }
         }
         
@@ -147,7 +111,21 @@ public class EthHistoricalBalanceProcessor
         }
         
         Console.WriteLine($"Completed processing historical balances for address {address}");
-        Console.WriteLine($"Final balance: {WeiToEth(currentBalance)} ETH");
+        
+        // Get final balance from the last processed block
+        try
+        {
+            var lastBlock = transactionsByBlock.LastOrDefault()?.Key;
+            if (lastBlock.HasValue)
+            {
+                var finalBalance = await _etherscanApi.GetBalanceAtBlockAsync(address, lastBlock.Value);
+                Console.WriteLine($"Final balance at block {lastBlock}: {finalBalance} ETH");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Warning: Could not fetch final balance: {ex.Message}");
+        }
     }
     
     /// <summary>

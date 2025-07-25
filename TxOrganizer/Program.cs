@@ -25,6 +25,7 @@ const string findDuplicateTransactions = "Find duplicate transactions";
 const string addSetting = "Add setting";
 const string detectTransactionDifferences = "Detect transaction differences";
 const string processEthHistoricalBalances = "Process ETH Historical Balances";
+const string addMultipleAddressLabels = "Add multiple address labels";
 const string exit = "Exit";
 
 try
@@ -50,6 +51,7 @@ try
 
     var repository = new FinancialDatabaseRepository(dbContext);
     var settingsRepository = new SettingsRepository(dbContext);
+    var addressLabelRepository = new AddressLabelRepository(dbContext);
     var coinGeckoPriceFetcher = new CoinGeckoPriceFetcher(dbContext);
     var csvSource = new TxSource(settingsRepository);
     
@@ -69,6 +71,7 @@ try
                 fetchBinanceTxHistory,
                 detectTransactionDifferences,
                 processEthHistoricalBalances,
+                addMultipleAddressLabels,
                 addSetting,
                 exit);
         action = AnsiConsole.Prompt(selectionPrompt);
@@ -84,10 +87,13 @@ try
                         .DefaultValue(null)
                         .AllowEmpty());
                 var balancesRenderer = new BalancesRenderer(startDate);
-                var balanceProcessor = new BalanceTxProcessor();
+                var balanceProcessor = new BalanceTxProcessor(dbContext);
 
-                balanceProcessor.AnalyzeBalances(transactions, balancesRenderer);
+                await balanceProcessor.AnalyzeBalances(transactions, balancesRenderer);
                 balanceProcessor.WriteTotalQuantityHistoryToCsv("total_quantity_history_balances.csv");
+
+                AnsiConsole.MarkupLine("Last transaction date: " +
+                                      $"{transactions.Max(x => x.Date).ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}");
                 break;
             }
             case traceTaxLots:
@@ -102,7 +108,7 @@ try
 
                 if (taxLotsRenderer.Trace)
                 {
-                    taxLotsProcessor.BuildTaxLots(transactions, taxLotsRenderer, null, taxLotsRenderer.TargetCurrency);
+                    taxLotsProcessor.BuildTaxLots(transactions, taxLotsRenderer, null!, taxLotsRenderer.TargetCurrency);
                 }
                 else
                 {
@@ -192,23 +198,35 @@ try
             }
             case processEthHistoricalBalances:
             {
-                // Check if API key is configured
+                // Check if API keys are configured
                 if (string.IsNullOrWhiteSpace(apiKeysConfig.Etherscan))
                 {
                     AnsiConsole.MarkupLine("[red]Error: Etherscan API key not configured in appsettings.json[/]");
                     AnsiConsole.MarkupLine("[yellow]Please set your Etherscan API key in appsettings.json under ApiKeys:Etherscan[/]");
                     break;
                 }
+                
+                if (string.IsNullOrWhiteSpace(apiKeysConfig.QuickNodeUrl))
+                {
+                    AnsiConsole.MarkupLine("[red]Error: QuickNode URL not configured in appsettings.json[/]");
+                    AnsiConsole.MarkupLine("[yellow]Please set your QuickNode endpoint URL in appsettings.json under ApiKeys:QuickNodeUrl[/]");
+                    break;
+                }
 
-                var address = AnsiConsole.Prompt(new TextPrompt<string>("Enter Ethereum address:")
-                    .Validate(addr => 
-                    {
-                        if (string.IsNullOrWhiteSpace(addr))
-                            return ValidationResult.Error("Address cannot be empty");
-                        if (addr.Length != 42 || !addr.StartsWith("0x"))
-                            return ValidationResult.Error("Invalid Ethereum address format (must be 42 chars starting with 0x)");
-                        return ValidationResult.Success();
-                    }));
+                var ethAddresses = await addressLabelRepository.GetAllLabelsAsync();
+
+                if (!ethAddresses.Any())
+                {
+                    AnsiConsole.MarkupLine("[yellow]No Ethereum addresses found in AddressLabel database.[/]");
+                    AnsiConsole.MarkupLine("[gray]Ethereum addresses should be 42 characters long and start with '0x'.[/]");
+                    break;
+                }
+
+                AnsiConsole.MarkupLine($"[blue]Found {ethAddresses.Count} Ethereum addresses to process:[/]");
+                foreach (var addr in ethAddresses)
+                {
+                    AnsiConsole.MarkupLine($"[gray]  {addr.Address} -> {addr.Label}{(addr.Category != null ? $" ({addr.Category})" : "")}[/]");
+                }
 
                 var startBlock = AnsiConsole.Prompt(new TextPrompt<long>("Enter start block number:")
                     .DefaultValue(0L)
@@ -223,29 +241,63 @@ try
                         return block.Value >= startBlock ? ValidationResult.Success() : ValidationResult.Error("End block must be >= start block");
                     }));
 
+                var confirm = AnsiConsole.Confirm($"Process historical balances for {ethAddresses.Count} addresses?");
+                if (!confirm)
+                {
+                    AnsiConsole.MarkupLine("[yellow]Operation cancelled.[/]");
+                    break;
+                }
+
                 try
                 {
                     var httpClient = new HttpClient();
-                    var etherscanApi = new EtherscanApiService(httpClient, apiKeysConfig.Etherscan);
+                    var etherscanApi = new EtherscanApiService(httpClient, apiKeysConfig.Etherscan, apiKeysConfig.QuickNodeUrl);
                     var ethProcessor = new EthHistoricalBalanceProcessor(dbContext, etherscanApi);
+
+                    var processedCount = 0;
+                    var errorCount = 0;
 
                     await AnsiConsole.Progress()
                         .StartAsync(async ctx =>
                         {
-                            var task = ctx.AddTask($"Processing ETH balances for {address}", maxValue: 100);
-                            task.IsIndeterminate = true;
+                            var overallTask = ctx.AddTask("Processing all addresses", maxValue: ethAddresses.Count);
                             
-                            await ethProcessor.ProcessHistoricalBalancesAsync(address, startBlock, endBlock);
-                            
-                            task.Value = task.MaxValue;
+                            foreach (var addressLabel in ethAddresses)
+                            {
+                                AnsiConsole.MarkupLine($"[cyan]Processing {addressLabel.Label} ({addressLabel.Address})...[/]");
+                                
+                                try
+                                {
+                                    await ethProcessor.ProcessHistoricalBalancesAsync(addressLabel.Address, startBlock, endBlock);
+                                    processedCount++;
+                                    AnsiConsole.MarkupLine($"[green]✓ Completed {addressLabel.Label} ({addressLabel.Address})[/]");
+                                }
+                                catch (Exception ex)
+                                {
+                                    errorCount++;
+                                    AnsiConsole.MarkupLine($"[red]✗ Error processing {addressLabel.Label} ({addressLabel.Address}): {ex.Message}[/]");
+                                }
+                                
+                                overallTask.Increment(1);
+                            }
                         });
 
-                    AnsiConsole.MarkupLine($"[green]Successfully processed historical balances for address {address}[/]");
+                    AnsiConsole.MarkupLine($"[blue]Processing completed:[/]");
+                    AnsiConsole.MarkupLine($"[green]  Successfully processed: {processedCount}[/]");
+                    if (errorCount > 0)
+                    {
+                        AnsiConsole.MarkupLine($"[red]  Errors encountered: {errorCount}[/]");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Error processing historical balances: {ex.Message}[/]");
+                    AnsiConsole.MarkupLine($"[red]Error during processing: {ex.Message}[/]");
                 }
+                break;
+            }
+            case addMultipleAddressLabels:
+            {
+                await AddMultipleAddressLabels(addressLabelRepository);
                 break;
             }
             case addSetting:
@@ -270,4 +322,95 @@ try
 catch (Exception e)
 {
     AnsiConsole.WriteException(e);
+}
+
+// Function to add multiple address labels
+static async Task AddMultipleAddressLabels(AddressLabelRepository addressLabelRepository)
+{
+    AnsiConsole.MarkupLine("[blue]Add Multiple Address Labels[/]");
+    AnsiConsole.MarkupLine("[gray]Enter address-label pairs. Type 'done' when finished.[/]");
+    AnsiConsole.MarkupLine("[gray]Format: address,label,category (category is optional)[/]");
+    AnsiConsole.WriteLine();
+
+    var addressLabels = new List<(string address, string label, string? category)>();
+
+    while (true)
+    {
+        var input = AnsiConsole.Prompt(new TextPrompt<string>($"Entry {addressLabels.Count + 1} (or 'done' to finish):")
+            .AllowEmpty());
+
+        if (string.IsNullOrWhiteSpace(input) || input.Equals("done", StringComparison.OrdinalIgnoreCase))
+        {
+            break;
+        }
+
+        var parts = input.Split(',', StringSplitOptions.TrimEntries);
+        
+        if (parts.Length < 2)
+        {
+            AnsiConsole.MarkupLine("[red]Invalid format. Use: address,label,category[/]");
+            continue;
+        }
+
+        var address = parts[0];
+        var label = parts[1];
+        var category = parts.Length > 2 ? parts[2] : null;
+
+        // Basic address validation
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            AnsiConsole.MarkupLine("[red]Address cannot be empty[/]");
+            continue;
+        }
+
+        if (address.Length == 42 && address.StartsWith("0x"))
+        {
+            // Ethereum address format
+        }
+        else if (address.Length < 6)
+        {
+            AnsiConsole.MarkupLine("[red]Address too short[/]");
+            continue;
+        }
+
+        if (string.IsNullOrWhiteSpace(label))
+        {
+            AnsiConsole.MarkupLine("[red]Label cannot be empty[/]");
+            continue;
+        }
+
+        addressLabels.Add((address, label, category));
+        AnsiConsole.MarkupLine($"[green]Added: {address} -> {label}{(category != null ? $" ({category})" : "")}[/]");
+    }
+
+    if (addressLabels.Count == 0)
+    {
+        AnsiConsole.MarkupLine("[yellow]No address labels to add.[/]");
+        return;
+    }
+
+    // Confirm before saving
+    var confirm = AnsiConsole.Confirm($"Save {addressLabels.Count} address labels?");
+    if (!confirm)
+    {
+        AnsiConsole.MarkupLine("[yellow]Operation cancelled.[/]");
+        return;
+    }
+
+    // Save all labels
+    var savedCount = 0;
+    foreach (var (address, label, category) in addressLabels)
+    {
+        try
+        {
+            await addressLabelRepository.AddOrUpdateLabelAsync(address, label, category);
+            savedCount++;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Error saving {address}: {ex.Message}[/]");
+        }
+    }
+
+    AnsiConsole.MarkupLine($"[green]Successfully saved {savedCount} of {addressLabels.Count} address labels.[/]");
 }
