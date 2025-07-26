@@ -62,7 +62,10 @@ public class BalancesRenderer : TransactionRenderer
             AnsiConsole.MarkupLine($"[cyan]{ethBalanceInfo}[/]");
         }
 
-        AnsiConsole.MarkupLine($"[red]{Enum.GetName(status)}[/]");
+        if (status != LocalBalance.ProcessingStatus.Processed)
+        {
+            AnsiConsole.MarkupLine($"[yellow]{Enum.GetName(status)}[/]");
+        }
 
         Console.WriteLine();
         var @continue = AnsiConsole.Confirm("Continue");

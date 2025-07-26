@@ -83,7 +83,7 @@ try
             {
                 var transactions = await TransactionLoader.ReadAllTransactionsAsync(repository);
 
-                var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("[[Optional]] Enter start date")
+                var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("[[Optional]] Enter start date (YYYY-MM-DD)")
                         .DefaultValue(null)
                         .AllowEmpty());
                 var balancesRenderer = new BalancesRenderer(startDate);
@@ -100,7 +100,7 @@ try
             {
                 var transactions = await TransactionLoader.ReadAllTransactionsAsync(repository);
 
-                var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("[[Optional]] Enter start date")
+                var startDate = AnsiConsole.Prompt(new TextPrompt<DateTime?>("[[Optional]] Enter start date (YYYY-MM-DD)")
                         .DefaultValue(null)
                         .AllowEmpty());
                 var taxLotsRenderer = new TaxLotsRenderer(startDate);

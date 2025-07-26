@@ -49,7 +49,8 @@ public class TaxLotProcessor
 
                     (remaining, var sold) = taxLot.Sell(tx, remaining);
 
-                    taxLotsRenderer.TraceTaxLotsAction(tx, remaining, sold, taxLot, taxLots.SelectMany(x => x.Value));
+                    var @continue = taxLotsRenderer.TraceTaxLotsAction(tx, remaining, sold, taxLot, taxLots.SelectMany(x => x.Value));
+                    if (!@continue) break;
                 }
             }
             
@@ -82,7 +83,7 @@ public class TaxLotProcessor
         using var csv = new CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture);
         csv.WriteRecords(_totalQuantityHistory.Select(x => new
         {
-            Time = x.Item1,
+            Time = x.Item1.ToString("yyyy-MM-dd"),
             Quantity = x.Item2
         }));
     }

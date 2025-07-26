@@ -227,7 +227,7 @@ public class BalanceTxProcessor
         using var csv = new CsvWriter(writer, System.Globalization.CultureInfo.InvariantCulture);
         csv.WriteRecords(_totalQuantityHistory.Select(x => new
         {
-            Time = x.Item1,
+            Time = x.Item1.ToString("yyyy-MM-dd"),
             Quantity = x.Item2
         }));
     }
