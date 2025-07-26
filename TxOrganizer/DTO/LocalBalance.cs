@@ -6,7 +6,8 @@ public class LocalBalance
     {
         Processed,
         NotRelevant,
-        NegativeBalance
+        NegativeBalance,
+        Diverged,
     }
 
     private List<Transaction> _transactions;
@@ -17,15 +18,17 @@ public class LocalBalance
 
     public double Balance { get; private set; }
 
-    public double Deposited { get; set; }
+    public double Deposited { get; private set; }
 
-    public double Withdrawn { get; set; }
+    public double Withdrawn { get; private set; }
     
-    public double Bought { get; set; }
+    public double Bought { get; private set; }
 
-    public double Sold { get; set; }
+    public double Sold { get; private set; }
 
-    public double Fees { get; set; }
+    public double Fees { get; private set; }
+
+    public double LastDivergence { get; private set; }
 
     public LocalBalance(string? location, string currency)
     {
@@ -34,75 +37,44 @@ public class LocalBalance
         _transactions = new List<Transaction>();
     }
 
-    public ProcessingStatus Process(Transaction tx)
+    public void UpdateBalance(double amount)
     {
-        if (tx.BuyCurrency != Currency && tx.SellCurrency != Currency && tx.FeeCurrency != Currency)
-            return ProcessingStatus.NotRelevant;
-
-        if (tx.BuyCurrency == Currency || tx.SellCurrency == Currency)
-        {
-            double balanceDiff;
-            switch (tx.Type)
-            {
-                case TxType.Trade:
-                case TxType.Migration:
-                    balanceDiff = tx.BuyCurrency == Currency ? tx.BuyAmount : - tx.SellAmount;
-                    Bought += tx.BuyCurrency == Currency ? tx.BuyAmount : 0;
-                    Sold += tx.SellCurrency == Currency ? tx.SellAmount : 0;
-                    break;
-                
-                case TxType.Deposit:
-                case TxType.Income:
-                case TxType.Airdrop:
-                case TxType.Borrow:
-                    balanceDiff = tx.BuyAmount;
-                    Deposited += tx.BuyAmount;
-                    break;
-                
-                case TxType.Withdrawal:
-                case TxType.Spend:
-                case TxType.Gift:
-                case TxType.Lost:
-                case TxType.Stolen:
-                case TxType.Repay:
-                    balanceDiff = - tx.SellAmount;
-                    Withdrawn += tx.SellAmount;
-                    break;
-                
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-
-            Balance += balanceDiff;
-        }
-
-        if (tx.FeeCurrency == Currency)
-        {
-            if (IncludeFees(tx)) Balance -= tx.Fee;
-            Fees += tx.Fee;
-        }
-
-        _transactions.Add(tx);
-
-        return Balance >= -1e-5 ? ProcessingStatus.Processed : ProcessingStatus.NegativeBalance;
+        Balance += amount;
     }
-
-    private static bool IncludeFees(Transaction tx)
+    
+    public void UpdateLastDivergence(double actualBalance)
     {
-        return tx switch
-        {
-            { Location: "Poloniex" } => tx.Type != TxType.Withdrawal,
-            { Location: "Kraken"} => false,
-            { Location: "kraken"} => false,
-            { Location: "Gemini"} => false,
-            { Location: "cex.io", FeeCurrency: "BTC"} => false,
-            { Location: "Jaxx"} => false,
-            { Location: "Coinbase wallet"} => false,
-            { Location: "Ledger" } => false,
-            { Location: "Trezor" } => false,
-            { Location: "coinbase"} => false,
-            // { Location: "localbitcoins"} => false,
-            _ => true
-        };
+        // Calculate divergence between our calculated balance and actual balance
+        LastDivergence = Math.Abs(Balance - actualBalance);
+    }
+    
+    public void UpdateDeposited(double amount)
+    {
+        Deposited += amount;
+    }
+    
+    public void UpdateWithdrawn(double amount)
+    {
+        Withdrawn += amount;
+    }
+    
+    public void UpdateBought(double amount)
+    {
+        Bought += amount;
+    }
+    
+    public void UpdateSold(double amount)
+    {
+        Sold += amount;
+    }
+    
+    public void UpdateFees(double amount)
+    {
+        Fees += amount;
+    }
+    
+    public void AddTransaction(Transaction tx)
+    {
+        _transactions.Add(tx);
     }
 }

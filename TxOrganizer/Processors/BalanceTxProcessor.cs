@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using CsvHelper;
 using Microsoft.EntityFrameworkCore;
 using TxOrganizer.ConsoleRender;
@@ -42,7 +43,7 @@ public class BalanceTxProcessor
             // If this is an ETH transaction with a hash, try to lookup the corresponding ETH balance
             var ethBalanceInfo = await TryLookupEthBalance(tx);
             
-            var status = balance.Process(tx);
+            var status = ProcessTransaction(tx, balance, ethBalanceInfo);
             var @continue = balancesRenderer.TraceBalancesAction(tx, status, balance, balances.Values, ethBalanceInfo);
             if (!@continue) break;
             
@@ -81,8 +82,108 @@ public class BalanceTxProcessor
 
             });
     }
-    
-    private async Task<string?> TryLookupEthBalance(Transaction tx)
+
+    private static LocalBalance.ProcessingStatus ProcessTransaction(Transaction tx, LocalBalance balance, EthBalanceInfo? ethBalanceInfo)
+    {
+        if (tx.BuyCurrency != balance.Currency && tx.SellCurrency != balance.Currency && tx.FeeCurrency != balance.Currency)
+            return LocalBalance.ProcessingStatus.NotRelevant;
+
+        if (tx.BuyCurrency == balance.Currency || tx.SellCurrency == balance.Currency)
+        {
+            double balanceDiff;
+            switch (tx.Type)
+            {
+                case TxType.Trade:
+                case TxType.Migration:
+                    balanceDiff = tx.BuyCurrency == balance.Currency ? tx.BuyAmount : -tx.SellAmount;
+                    balance.UpdateBought(tx.BuyCurrency == balance.Currency ? tx.BuyAmount : 0);
+                    balance.UpdateSold(tx.SellCurrency == balance.Currency ? tx.SellAmount : 0);
+                    break;
+
+                case TxType.Deposit:
+                case TxType.Income:
+                case TxType.Airdrop:
+                case TxType.Borrow:
+                    balanceDiff = tx.BuyAmount;
+                    balance.UpdateDeposited(tx.BuyAmount);
+                    break;
+
+                case TxType.Withdrawal:
+                case TxType.Spend:
+                case TxType.Gift:
+                case TxType.Lost:
+                case TxType.Stolen:
+                case TxType.Repay:
+                    balanceDiff = -tx.SellAmount;
+                    balance.UpdateWithdrawn(tx.SellAmount);
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
+            balance.UpdateBalance(balanceDiff);
+        }
+
+        if (tx.FeeCurrency == balance.Currency)
+        {
+            if (IncludeFees(tx)) balance.UpdateBalance(-tx.Fee);
+            balance.UpdateFees(tx.Fee);
+        }
+
+        balance.AddTransaction(tx);
+
+        var margin = 1e-5;
+        var status = balance.Balance >= -margin ?
+            LocalBalance.ProcessingStatus.Processed :
+            LocalBalance.ProcessingStatus.NegativeBalance;
+
+        if (ethBalanceInfo == null)
+        {
+            return status;
+        }
+
+        var divergence = Math.Abs((double)ethBalanceInfo.BalanceEth - balance.Balance);
+        var addressComponent = balance.Location.Contains('_')
+            ? balance.Location.Split('_').Last()
+            : null;
+
+        if (addressComponent is null || !ethBalanceInfo.Address.ToLower().StartsWith(addressComponent))
+        {
+            return status;
+        }
+        
+        // Update last divergence when comparing with actual ETH balance
+        balance.UpdateLastDivergence((double)ethBalanceInfo.BalanceEth);
+
+        if (divergence > 0.1)
+        {
+            status = LocalBalance.ProcessingStatus.Diverged;
+        }
+
+        return status;
+    }
+
+    private static bool IncludeFees(Transaction tx)
+    {
+        return tx switch
+        {
+            { Location: "Poloniex" } => tx.Type != TxType.Withdrawal,
+            { Location: "Kraken"} => false,
+            { Location: "kraken"} => false,
+            { Location: "Gemini"} => false,
+            { Location: "cex.io", FeeCurrency: "BTC"} => false,
+            { Location: "Jaxx"} => false,
+            { Location: "Coinbase wallet"} => false,
+            { Location: "Ledger" } => false,
+            { Location: "Trezor" } => false,
+            { Location: "coinbase"} => false,
+            // { Location: "localbitcoins"} => false,
+            _ => true
+        };
+    }
+
+    private async Task<EthBalanceInfo?> TryLookupEthBalance(Transaction tx)
     {
         // Only lookup ETH balances if we have a database context and the transaction has a hash
         if (_dbContext == null || string.IsNullOrEmpty(tx.TxHash))
@@ -100,8 +201,15 @@ public class BalanceTxProcessor
                 
             if (ethBalance != null)
             {
-                // Return the ETH balance information for display
-                return $"ETH Balance: {ethBalance.BalanceEth:F6} ETH at block {ethBalance.BlockNumber}";
+                // Return the structured ETH balance information
+                return new EthBalanceInfo
+                {
+                    BalanceEth = ethBalance.BalanceEth,
+                    BlockNumber = ethBalance.BlockNumber,
+                    TransactionHash = ethBalance.TransactionHash,
+                    BlockTimestamp = ethBalance.BlockTimestamp,
+                    Address = ethBalance.Address
+                };
             }
         }
         catch (Exception ex)

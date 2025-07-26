@@ -30,7 +30,7 @@ public class BalancesRenderer : TransactionRenderer
     }
 
     public bool TraceBalancesAction(Transaction tx, LocalBalance.ProcessingStatus status, LocalBalance current,
-        IEnumerable<LocalBalance> balances, string? ethBalanceInfo = null)
+        IEnumerable<LocalBalance> balances, EthBalanceInfo? ethBalanceInfo = null)
     {
         if (!_trace || status == LocalBalance.ProcessingStatus.NotRelevant) return true;
 
@@ -57,15 +57,12 @@ public class BalancesRenderer : TransactionRenderer
         RenderBalances(current, balances);
         RenderTx(tx, 0, 0);
 
-        if (!string.IsNullOrEmpty(ethBalanceInfo))
+        if (ethBalanceInfo != null)
         {
             AnsiConsole.MarkupLine($"[cyan]{ethBalanceInfo}[/]");
         }
 
-        if (status == LocalBalance.ProcessingStatus.NegativeBalance)
-        {
-            AnsiConsole.MarkupLine($"[red]Negative balance![/]");
-        }
+        AnsiConsole.MarkupLine($"[red]{Enum.GetName(status)}[/]");
 
         Console.WriteLine();
         var @continue = AnsiConsole.Confirm("Continue");
@@ -84,6 +81,7 @@ public class BalancesRenderer : TransactionRenderer
         table.AddColumn("Withdrawn");
         table.AddColumn("Sold");
         table.AddColumn("Fees");
+        table.AddColumn("Last Divergence");
 
         allBalances = allBalances
             .Where(x => x.Currency == TargetCurrency && (x.Balance != 0 || x.Equals(currentBalance)))
@@ -107,7 +105,8 @@ public class BalancesRenderer : TransactionRenderer
                 new Markup($"{balance.Bought} {balance.Currency}", style),
                 new Markup($"{balance.Withdrawn} {balance.Currency}", style),
                 new Markup($"{balance.Sold} {balance.Currency}", style),
-                new Markup($"{balance.Fees} {balance.Currency}", style)
+                new Markup($"{balance.Fees} {balance.Currency}", style),
+                new Markup($"{balance.LastDivergence} {balance.Currency}", style)
             );
         }
 
